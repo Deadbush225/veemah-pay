@@ -26,8 +26,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { account_nu
     if (session !== '0000') {
       return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
     }
-    if (status && status !== 'Active' && status !== 'Locked') {
-      return NextResponse.json({ error: 'Status must be Active or Locked.' }, { status: 400 });
+    if (status && status !== 'Active' && status !== 'Locked' && status !== 'Archived') {
+      return NextResponse.json({ error: 'Status must be Active, Locked, or Archived.' }, { status: 400 });
     }
     try {
       // Detect optional failed_attempts column to avoid errors on older DBs
@@ -74,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { account_nu
     const current = await pool.query('SELECT status, balance::float AS balance FROM accounts WHERE account_number = $1', [account_number]);
     if (current.rowCount === 0) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     const { status: currStatus, balance } = current.rows[0];
-    if (currStatus === 'Locked') return NextResponse.json({ error: 'Account locked' }, { status: 403 });
+    if (currStatus === 'Locked' || currStatus === 'Archived') return NextResponse.json({ error: 'Account unavailable' }, { status: 403 });
 
     if (op === 'deposit') {
       if (amount < 100) return NextResponse.json({ error: 'Deposit minimum is 100.' }, { status: 400 });
@@ -93,6 +93,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { account_nu
       return NextResponse.json({ account: res.rows[0] });
     }
   } catch (err: any) {
+    return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { account_number: string } }) {
+  try {
+    const { account_number } = params;
+    console.log(`[DELETE /api/accounts/[account_number]] Received request for account: ${account_number}`);
+    const session = req.cookies.get('session')?.value;
+    if (session !== '0000') {
+      console.log('[DELETE /api/accounts/[account_number]] Admin privileges required.');
+      return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
+    }
+    if (account_number === '0000') {
+      return NextResponse.json({ error: 'Cannot delete administrator account.' }, { status: 400 });
+    }
+
+    try {
+      const result = await pool.query('DELETE FROM accounts WHERE account_number = $1', [account_number]);
+      if (result.rowCount === 0) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+      return new NextResponse(null, { status: 204 });
+    } catch (e: any) {
+      if (e?.code === '23503') {
+        // Foreign key violation: dependent records prevent deletion
+        return NextResponse.json(
+          { error: 'Delete blocked by existing references (e.g., transactions target_account). Void or remove dependent records first.' },
+          { status: 409 }
+        );
+      }
+      throw e;
+    }
+  } catch (err: any) {
+    console.error('[DELETE /api/accounts/[account_number]]', err);
     return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 500 });
   }
 }

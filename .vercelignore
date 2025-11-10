@@ -1,0 +1,7 @@
+db/
+docker-compose.yml
+java-server/
+**/*.class
+**/target/
+README.md
+*.md

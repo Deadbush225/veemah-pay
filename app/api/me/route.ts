@@ -4,7 +4,8 @@ import { pool } from '@/lib/db';
 export async function GET(req: NextRequest) {
   const session = req.cookies.get('session')?.value;
   if (!session) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+    // Return a 200 with authenticated: false so client startup doesn't log errors
+    return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 
   try {
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
       [session]
     );
     if (result.rowCount === 0) {
-      return NextResponse.json({ authenticated: false }, { status: 401 });
+      return NextResponse.json({ authenticated: false }, { status: 200 });
     }
     return NextResponse.json({ authenticated: true, account: result.rows[0] });
   } catch (err: any) {

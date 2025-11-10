@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
     if (row.status === 'Locked') {
       return NextResponse.json({ error: 'Account locked. Please contact support.' }, { status: 403 });
     }
+    if (row.status === 'Archived') {
+      return NextResponse.json({ error: 'Account archived. Access disabled.' }, { status: 403 });
+    }
 
     if (row.pin !== pin) {
       if (hasFailedAttempts) {

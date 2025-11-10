@@ -2,7 +2,19 @@
 
 body {
   background: #008080; /* Nostalgic teal desktop */
+  /* Light wallpaper dot pattern for extra Win98 feel */
+  background-image:
+    radial-gradient(#009090 1px, transparent 1px),
+    radial-gradient(#009090 1px, transparent 1px);
+  background-position: 0 0, 10px 10px;
+  background-size: 20px 20px, 20px 20px;
   margin: 0;
+}
+
+* { cursor: default; }
+
+button, input, select {
+  font-family: Tahoma, "MS Sans Serif", "Segoe UI", sans-serif;
 }
 
 .table {
