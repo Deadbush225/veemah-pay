@@ -1,7 +1,6 @@
 package com.bank.controller;
 
 import com.bank.repository.AccountRepository;
-import com.bank.repository.NotificationRepository;
 import com.bank.repository.TransactionRepository;
 import com.bank.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,8 +22,6 @@ public class AccountController {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private NotificationRepository notificationRepository;
 
     @DeleteMapping("/{accountNumber}")
     @Transactional
@@ -36,10 +33,8 @@ public class AccountController {
         long txDeps = transactionRepository.countByAccountNumber(accountNumber) +
                 transactionRepository.countByTargetAccount(accountNumber);
         long userDeps = userRepository.countByAccountNumber(accountNumber);
-        long notifDeps = notificationRepository.countByRecipientAccountNumber(accountNumber);
-
-        if (txDeps > 0 || userDeps > 0 || notifDeps > 0) {
-            String msg = String.format("Cannot delete account; dependencies exist (transactions=%d, users=%d, notifications=%d). Consider archiving.", txDeps, userDeps, notifDeps);
+        if (txDeps > 0 || userDeps > 0) {
+            String msg = String.format("Cannot delete account; dependencies exist (transactions=%d, users=%d). Consider archiving.", txDeps, userDeps);
             return ResponseEntity.status(409).body(msg);
         }
 
