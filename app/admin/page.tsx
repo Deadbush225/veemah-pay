@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from 'next/image';
-import logo from '../../assets/img/veemahpay-logo.png';
+import { Header } from '@/components/nav/Header';
+import { Breadcrumbs } from '@/components/nav/Breadcrumbs';
 
 type Account = { account_number: string; name: string; balance: number; status: "Active" | "Locked" | "Archived" };
 type Transaction = { id: number; type: string; status: string; amount: number; target_account?: string | null; note?: string | null };
@@ -107,16 +107,10 @@ export default function AdminPage() {
 
   return (
     <main>
-      <header className="site-header">
-        <div className="inner container" style={{ justifyContent: "space-between" }}>
-          <div className="brand"><Image src={logo} alt="VeemahPay" width={220} height={60} priority /></div>
-          <nav className="top-nav">
-            <a href="/">Home</a>
-            <a href="/login">Login</a>
-            <a href="/signup">Sign Up</a>
-          </nav>
-        </div>
-      </header>
+      <Header />
+      <div className="inner container" style={{ paddingTop: 8 }}>
+        <Breadcrumbs />
+      </div>
       <section className="quick-actions">
         <div className="inner container" style={{ display: "grid", gap: 16 }}>
           {error && <div style={{ color: "#b00020" }}>{error}</div>}
