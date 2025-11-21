@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
     const to = url.searchParams.get('to');
     const q = url.searchParams.get('q');
     const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 500);
+    const cursorParam = url.searchParams.get('cursor');
+    const cursorIdParam = url.searchParams.get('cursor_id');
+    const cursorTsParam = url.searchParams.get('cursor_created_at');
 
     // Introspect available columns to gracefully support older schemas
     const colsRes = await pool.query(
@@ -81,10 +84,56 @@ export async function GET(req: NextRequest) {
       idx++;
     }
 
-    const order = has('created_at') ? 'created_at DESC' : 'id DESC';
+    const hasCreatedAt = has('created_at');
+
+    let cursorId: number | null = null;
+    let cursorTs: Date | null = null;
+    if (cursorParam) {
+      try {
+        const raw = Buffer.from(cursorParam, 'base64').toString('utf8');
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj.id !== 'undefined') cursorId = Number(obj.id);
+        if (obj && obj.created_at) cursorTs = new Date(obj.created_at);
+      } catch {}
+    }
+    if (!cursorId && cursorIdParam) cursorId = Number(cursorIdParam);
+    if (!cursorTs && cursorTsParam) cursorTs = new Date(cursorTsParam);
+
+    if (hasCreatedAt && (cursorTs || cursorId)) {
+      if (cursorTs && cursorId) {
+        where.push(`(created_at < $${idx} OR (created_at = $${idx} AND id < $${idx + 1}))`);
+        params.push(cursorTs);
+        params.push(cursorId);
+        idx += 2;
+      } else if (cursorTs) {
+        where.push(`created_at < $${idx}`);
+        params.push(cursorTs);
+        idx += 1;
+      } else if (cursorId) {
+        where.push(`id < $${idx}`);
+        params.push(cursorId);
+        idx += 1;
+      }
+    } else if (!hasCreatedAt && cursorId) {
+      where.push(`id < $${idx}`);
+      params.push(cursorId);
+      idx += 1;
+    }
+
+    const order = hasCreatedAt ? 'created_at DESC, id DESC' : 'id DESC';
     const sql = `SELECT ${selectFields.join(', ')} FROM transactions ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order} LIMIT ${limit}`;
     const res = await pool.query(sql, params);
-    return NextResponse.json({ transactions: res.rows });
+
+    let next_cursor: string | null = null;
+    if (res.rows.length === limit) {
+      const last = res.rows[res.rows.length - 1];
+      if (hasCreatedAt) {
+        next_cursor = Buffer.from(JSON.stringify({ id: last.id, created_at: last.created_at })).toString('base64');
+      } else {
+        next_cursor = String(last.id);
+      }
+    }
+    return NextResponse.json({ transactions: res.rows, next_cursor });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 500 });
   }
