@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import logo from "../../assets/img/veemahpay-logo.png";
 import { ThemeToggle } from "@/components/ui/ThemeProvider";
+import { LanguageToggle, useLanguage } from "@/components/ui/LanguageProvider";
 
 type Me = { authenticated: boolean; account?: { account_number: string; name: string; balance: number; status: string } };
 
@@ -12,6 +13,7 @@ export function Header(){
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [open, setOpen] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     fetch("/api/me").then(r => r.json()).then(setMe).catch(() => setMe({ authenticated: false } as any));
@@ -33,18 +35,19 @@ export function Header(){
       <div className="inner container" style={{ justifyContent: "space-between" }}>
         <div className="brand"><Image src={logo} alt="VeemahPay" width={180} height={50} priority /></div>
         <nav className={`top-nav ${open ? "open" : ""}`}>
-          <NavLink href="/" label="Home" />
+          <NavLink href="/" label={t('nav.home')} />
           {!me?.authenticated && (
             <>
-              <NavLink href="/login" label="Login" />
-              <NavLink href="/signup" label="Sign Up" />
+              <NavLink href="/login" label={t('nav.login')} />
+              <NavLink href="/signup" label={t('nav.signup')} />
             </>
           )}
           {me?.authenticated && (
             <>
-              {isAdmin ? <NavLink href="/admin" label="Admin" /> : <NavLink href="/user" label="Dashboard" />}
-              <button className="btn ghost" onClick={logout}>Sign Out</button>
+              {isAdmin ? <NavLink href="/admin" label={t('nav.admin')} /> : <NavLink href="/user" label={t('nav.dashboard')} />}
+              <button className="btn ghost" onClick={logout}>{t('nav.signout')}</button>
               <ThemeToggle />
+              <LanguageToggle />
               <div className="avatar" title={me?.account?.name ?? "User"}>{String(me?.account?.name ?? "U").slice(0,1).toUpperCase()}</div>
               <div className="quick-info">
                 <span>{me?.account?.name}</span>
@@ -52,7 +55,12 @@ export function Header(){
               </div>
             </>
           )}
-          {!me?.authenticated && <ThemeToggle />}
+          {!me?.authenticated && (
+            <>
+              <ThemeToggle />
+              <LanguageToggle />
+            </>
+          )}
         </nav>
         <button className="hamburger" aria-label="Toggle navigation" onClick={() => setOpen(!open)}>
           <span />
@@ -63,4 +71,3 @@ export function Header(){
     </header>
   );
 }
-

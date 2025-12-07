@@ -45,7 +45,7 @@ a { color: inherit; text-decoration: none; }
 .brand-mark { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg,#0a6bff,#39b6ff); display: inline-block; }
 .top-nav { display: flex; gap: 16px; color: var(--muted); align-items: center; }
 .top-nav a { padding: 8px; border-radius: 6px; }
-.top-nav a:hover { color: var(--text); background: #f1f4f9; }
+.top-nav a:hover { color: var(--text); background: var(--border); }
 .top-nav a.active { color: var(--text); font-weight: 600; }
 .top-nav .btn { padding: 8px 10px; }
 .search { margin-left: auto; display: flex; align-items: center; gap: 8px; }

@@ -29,6 +29,9 @@ public class Account {
     @Column(name = "failed_attempts")
     private Integer failedAttempts;
 
+    @Column(name = "email")
+    private String email;
+
     public String getAccountNumber() { return accountNumber; }
     public void setAccountNumber(String accountNumber) { this.accountNumber = accountNumber; }
     public String getName() { return name; }
@@ -41,4 +44,6 @@ public class Account {
     public void setStatus(String status) { this.status = status; }
     public Integer getFailedAttempts() { return failedAttempts; }
     public void setFailedAttempts(Integer failedAttempts) { this.failedAttempts = failedAttempts; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 }

@@ -5,18 +5,23 @@ type Theme = "light" | "dark";
 
 export function ThemeProvider({ children }:{ children: React.ReactNode }){
   const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("theme") as Theme | null : null;
     const prefersDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     const initial: Theme = saved ?? (prefersDark ? "dark" : "light");
     setTheme(initial);
   }, []);
+
   useEffect(() => {
-    if (typeof document !== "undefined") {
+    if (mounted) {
       document.documentElement.setAttribute("data-theme", theme);
       window.localStorage.setItem("theme", theme);
     }
-  }, [theme]);
+  }, [theme, mounted]);
+
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}

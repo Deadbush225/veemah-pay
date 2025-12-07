@@ -1,29 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 const LOCK_THRESHOLD = 3; // number of failed PIN attempts before lock
 
 export async function POST(req: NextRequest) {
-  const { account_number, pin } = await req.json();
+  const { email, pin, password } = await req.json();
 
-  if (!account_number || !pin) {
-    return NextResponse.json({ error: 'Account number and PIN are required.' }, { status: 400 });
+  // "pin" field might come from legacy clients or the web form using the "pin" variable name for password
+  // But strictly, we expect `email` + `password` (new) or `email` + `pin` (old)
+  const credential = password || pin;
+
+  if (!email || !credential) {
+    return NextResponse.json({ error: 'Email and Password/PIN are required.' }, { status: 400 });
   }
 
   try {
-    // Detect whether the failed_attempts column exists to avoid crashes on older DBs
     const colCheck = await pool.query(
-      `SELECT 1 FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'failed_attempts'`
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'accounts'`
     );
-    const hasFailedAttempts = Number(colCheck?.rowCount ?? 0) > 0;
+    const cols: string[] = colCheck.rows.map((r: any) => r.column_name);
+    const hasFailedAttempts = cols.includes('failed_attempts');
+    const hasEmail = cols.includes('email');
+    const hasPassword = cols.includes('password');
 
-    const result = await pool.query(
-      'SELECT account_number, name, balance::float AS balance, status, pin FROM accounts WHERE account_number = $1',
-      [account_number]
-    );
+    let result;
+    // Select password if column exists
+    const selectCols = `account_number, name, balance::float AS balance, status, pin${hasEmail ? ', email' : ''}${hasPassword ? ', password' : ''}`;
+    
+    if (hasEmail && String(email).includes('@')) {
+      result = await pool.query(
+        `SELECT ${selectCols} FROM accounts WHERE email = $1`,
+        [email]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT ${selectCols} FROM accounts WHERE account_number = $1`,
+        [email] // email variable here acts as identifier (account number or email)
+      );
+    }
 
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: 'Invalid account number.' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid email or account not found.' }, { status: 401 });
     }
 
     const row = result.rows[0];
@@ -35,7 +53,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account archived. Access disabled.' }, { status: 403 });
     }
 
-    if (row.pin !== pin) {
+    // AUTHENTICATION LOGIC
+    // 1. Try Password (if row has it and user provided it)
+    // 2. Fallback to PIN
+    let authenticated = false;
+
+    if (hasPassword && row.password && password) {
+      // Check password (hashed)
+      const match = await bcrypt.compare(password, row.password);
+      if (match) {
+        authenticated = true;
+      } else if (password === row.password) {
+          // Fallback for existing plaintext passwords (legacy support)
+          authenticated = true;
+          // Optionally upgrade to hash here, but let's keep it simple for now
+      }
+    } else {
+      // Fallback: Check PIN (legacy or if user has no password set)
+      // Note: If user has a password but tries to login with PIN on web, we might allow it if we want hybrid auth,
+      // but "professional" implies checking the correct credential.
+      // However, to avoid breaking legacy, we check against PIN if password check didn't pass or wasn't attempted.
+      if (row.pin === credential) {
+        authenticated = true;
+      }
+    }
+
+    if (!authenticated) {
       if (hasFailedAttempts) {
         // Increment failed attempts; lock account if threshold reached
         const updated = await pool.query(
@@ -44,15 +87,14 @@ export async function POST(req: NextRequest) {
                status = CASE WHEN failed_attempts + 1 >= $2 THEN 'Locked' ELSE status END
            WHERE account_number = $1
            RETURNING failed_attempts, status`,
-          [account_number, LOCK_THRESHOLD]
+          [row.account_number, LOCK_THRESHOLD]
         );
         const u = updated.rows[0];
         if (u.status === 'Locked') {
           return NextResponse.json({ error: 'Account locked after multiple failed attempts.' }, { status: 403 });
         }
       }
-      // If column missing, just return invalid PIN without lockout
-      return NextResponse.json({ error: 'Invalid PIN.' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid Password or PIN.' }, { status: 401 });
     }
 
     // Successful login: reset failed_attempts if available
@@ -69,6 +111,7 @@ export async function POST(req: NextRequest) {
         name: row.name,
         balance: row.balance,
         status: row.status,
+        email: hasEmail ? row.email : undefined
       },
     });
     // Minimal session cookie storing the account number
@@ -79,6 +122,7 @@ export async function POST(req: NextRequest) {
     });
     return res;
   } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 500 });
+    console.error('Login error:', err);
+    return NextResponse.json({ error: 'Login service unavailable. Please try again.' }, { status: 500 });
   }
 }

@@ -140,42 +140,66 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { type, source_account, target_account, amount, note, pending } = await req.json();
-  const session = req.cookies.get('session')?.value;
-  const t: TxType = type;
-  const amt = Number(amount);
-
-  if (!['deposit','withdraw','transfer'].includes(String(t))) {
-    return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-  }
-  if (Number.isNaN(amt) || amt <= 0) {
-    return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
-  }
-  if (!source_account || (t === 'transfer' && !target_account)) {
-    return NextResponse.json({ error: 'Missing account(s)' }, { status: 400 });
-  }
-
-  // Authorization: customers can only act on their own source account; admin can act on any.
-  if (!session) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  }
-  const isAdmin = session === '0000';
-  if (!isAdmin && session !== source_account) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const client = await pool.connect();
+  let client;
   try {
+    const { type, source_account, target_account, amount, note, pending, pin } = await req.json();
+    const session = req.cookies.get('session')?.value;
+    const t: TxType = type;
+    const amt = Number(amount);
+
+    if (!['deposit','withdraw','transfer'].includes(String(t))) {
+      return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+    }
+    if (Number.isNaN(amt) || amt <= 0) {
+      return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 });
+    }
+    if (!source_account || (t === 'transfer' && !target_account)) {
+      return NextResponse.json({ error: 'Missing account(s)' }, { status: 400 });
+    }
+    if ((t === 'withdraw' || t === 'transfer') && !pin) {
+        return NextResponse.json({ error: 'PIN is required for this transaction.' }, { status: 400 });
+    }
+
+    // Authorization: customers can only act on their own source account; admin can act on any.
+    if (!session) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    const isAdmin = session === '0000';
+    if (!isAdmin && session !== source_account) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    client = await pool.connect();
     await client.query('BEGIN');
 
-    // Load source (and target if needed)
+    // 1. Acquire locks in deterministic order to prevent deadlocks and race conditions
+    const accountsToLock = [source_account];
+    if (t === 'transfer' && target_account) {
+      accountsToLock.push(target_account);
+    }
+    // Sort account numbers to ensure consistent locking order (Deadlock Prevention)
+    accountsToLock.sort();
+
+    for (const acc of accountsToLock) {
+      // Use FOR UPDATE to lock the row until transaction commit
+      await client.query('SELECT 1 FROM accounts WHERE account_number = $1 FOR UPDATE', [acc]);
+    }
+
+    // 2. Load source (and target if needed) - now safe because rows are locked
     const srcRes = await client.query(
-      `SELECT account_number, status, balance::float AS balance FROM accounts WHERE account_number = $1`,
+      `SELECT account_number, status, balance::float AS balance, pin FROM accounts WHERE account_number = $1`,
       [source_account]
     );
     if (srcRes.rowCount === 0) throw new Error('Source account not found');
     const src = srcRes.rows[0];
     if (src.status !== 'Active') throw new Error('Source account unavailable');
+    
+    // Validate PIN for sensitive transactions
+    if ((t === 'withdraw' || t === 'transfer') && !isAdmin) {
+        if (src.pin !== pin) {
+            throw new Error('Invalid PIN.');
+        }
+    }
 
     let trg: any = null;
     if (t === 'transfer') {
@@ -288,9 +312,10 @@ export async function POST(req: NextRequest) {
     await client.query('COMMIT');
     return NextResponse.json({ transaction: tx });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
+    console.error('Transaction Error:', err);
     return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 400 });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
