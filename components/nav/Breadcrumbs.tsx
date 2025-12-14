@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import React from "react";
 import { usePathname } from "next/navigation";
 
@@ -9,11 +10,11 @@ export function Breadcrumbs(){
   const labels = parts.map(p => p === "admin" ? "Admin" : p === "user" ? "Dashboard" : p[0].toUpperCase() + p.slice(1));
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">
-      <a href="/">Home</a>
+      <Link href="/">Home</Link>
       {labels.map((l,i) => (
         <span key={i}>
           <span className="sep">/</span>
-          <a href={paths[i]} aria-current={i === labels.length - 1 ? "page" : undefined}>{l}</a>
+          <Link href={paths[i]} aria-current={i === labels.length - 1 ? "page" : undefined}>{l}</Link>
         </span>
       ))}
     </nav>

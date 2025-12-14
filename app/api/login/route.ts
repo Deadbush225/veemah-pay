@@ -46,6 +46,31 @@ export async function POST(req: NextRequest) {
 
     const row = result.rows[0];
 
+    // Require email verification if email exists and pending record is present
+    if (hasEmail && row.email) {
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS email_verification_codes (
+            email TEXT PRIMARY KEY,
+            account_number TEXT NOT NULL,
+            code TEXT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            verified_at TIMESTAMPTZ NULL
+          )
+        `);
+        const ver = await pool.query(
+          `SELECT 1 FROM email_verification_codes WHERE email = $1 AND verified_at IS NULL`,
+          [row.email]
+        );
+        if ((ver.rowCount ?? 0) > 0) {
+          return NextResponse.json({ error: 'Email not verified. Check your inbox for the verification code.' }, { status: 403 });
+        }
+      } catch (e) {
+        console.error('Email verification check failed:', e);
+      }
+    }
+
     if (row.status === 'Locked') {
       return NextResponse.json({ error: 'Account locked. Please contact support.' }, { status: 403 });
     }

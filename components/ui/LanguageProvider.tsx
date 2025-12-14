@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useState } from 'react';
 
 type Language = 'en' | 'tl';
 
@@ -55,8 +55,8 @@ const translations: Translations = {
   'signup.password_placeholder': { en: 'At least 8 characters', tl: 'Hindi bababa sa 8 karakter' },
   'signup.confirm_password': { en: 'Confirm Password', tl: 'Kumpirmahin ang Password' },
   'signup.confirm_password_placeholder': { en: 'Re-enter password', tl: 'Ilagay muli ang password' },
-  'signup.pin': { en: 'PIN (4 digits)', tl: 'PIN (4 na numero)' },
-  'signup.pin_placeholder': { en: '4-digit PIN', tl: '4-digit PIN' },
+  'signup.pin': { en: 'PIN (5 digits)', tl: 'PIN (5 na numero)' },
+  'signup.pin_placeholder': { en: '5-digit PIN', tl: '5-digit PIN' },
   'signup.initial_balance': { en: 'Initial Balance', tl: 'Paunang Balanse' },
   'signup.initial_balance_placeholder': { en: 'Optional (min 0)', tl: 'Opsyonal (min 0)' },
   'signup.terms': { en: 'I accept the Terms of Service', tl: 'Tinatanggap ko ang Mga Tuntunin ng Serbisyo' },
@@ -102,14 +102,18 @@ const translations: Translations = {
   'dash.spending': { en: 'Spending Overview', tl: 'Pangkalahatang-ideya ng Gastusin' },
 
   // Forgot Password
-  'forgot.title': { en: 'Reset PIN', tl: 'I-reset ang PIN' },
+  'forgot.title': { en: 'Reset Password', tl: 'I-reset ang Password' },
   'forgot.subtitle_email': { en: 'Enter your email to receive a reset code.', tl: 'Ilagay ang email para makatanggap ng reset code.' },
   'forgot.subtitle_code': { en: 'Enter the code sent to your email.', tl: 'Ilagay ang code na ipinadala sa email.' },
   'forgot.send_code': { en: 'Send Code', tl: 'Ipadala ang Code' },
   'forgot.sending': { en: 'Sending...', tl: 'Ipinapadala...' },
   'forgot.code_placeholder': { en: '6-digit Code', tl: '6-digit Code' },
-  'forgot.new_pin_placeholder': { en: 'New PIN (4 digits)', tl: 'Bagong PIN (4 na numero)' },
-  'forgot.reset_btn': { en: 'Reset PIN', tl: 'I-reset ang PIN' },
+  'forgot.new_pin_placeholder': { en: 'New PIN (5 digits)', tl: 'Bagong PIN (5 na numero)' },
+  'forgot.confirm_pin_placeholder': { en: 'Confirm PIN (5 digits)', tl: 'Kumpirmahin ang PIN (5 na numero)' },
+  'forgot.new_password_placeholder': { en: 'New Password (min 8)', tl: 'Bagong Password (min 8)' },
+  'forgot.confirm_password_placeholder': { en: 'Confirm Password', tl: 'Kumpirmahin ang Password' },
+  'forgot.continue': { en: 'Continue', tl: 'Magpatuloy' },
+  'forgot.reset_btn': { en: 'Reset Password', tl: 'I-reset ang Password' },
   'forgot.resetting': { en: 'Resetting...', tl: 'Nagre-reset...' },
   'forgot.back': { en: 'Back', tl: 'Bumalik' },
 
@@ -139,21 +143,22 @@ type LanguageContextType = {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<Language>('en');
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem('language') as Language;
-    if (saved) setLanguage(saved);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) {
-      localStorage.setItem('language', language);
+export function LanguageProvider({ children, initialLanguage }: { children: React.ReactNode; initialLanguage?: Language }) {
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof initialLanguage === 'string') return initialLanguage;
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('language') as Language | null;
+      if (saved === 'en' || saved === 'tl') return saved;
     }
-  }, [language, mounted]);
+    return 'en';
+  });
+
+  useLayoutEffect(() => {
+    try {
+      localStorage.setItem('language', language);
+      document.cookie = `language=${language};path=/;max-age=31536000`;
+    } catch {}
+  }, [language]);
 
   const t = (key: string) => {
     return translations[key]?.[language] || key;

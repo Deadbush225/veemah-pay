@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import logo from "../../assets/img/veemahpay-logo.png";
 import { ThemeToggle } from "@/components/ui/ThemeProvider";
@@ -25,7 +26,7 @@ export function Header(){
   };
 
   const NavLink = ({ href, label }:{ href: string; label: string }) => (
-    <a href={href} className={pathname === href ? "active" : ""}>{label}</a>
+    <Link href={href} className={pathname === href ? "active" : ""}>{label}</Link>
   );
 
   const isAdmin = me?.authenticated && me?.account?.account_number === "0000";
@@ -33,7 +34,11 @@ export function Header(){
   return (
     <header className={`site-header ${open ? "mobile-open" : ""}`}>
       <div className="inner container" style={{ justifyContent: "space-between" }}>
-        <div className="brand"><Image src={logo} alt="VeemahPay" width={180} height={50} priority /></div>
+        <div className="brand">
+          <Link href="/" aria-label="Go to Home">
+            <Image src={logo} alt="VeemahPay" width={180} height={50} priority />
+          </Link>
+        </div>
         <nav className={`top-nav ${open ? "open" : ""}`}>
           <NavLink href="/" label={t('nav.home')} />
           {!me?.authenticated && (

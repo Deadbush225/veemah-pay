@@ -139,10 +139,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
-  let client;
-  try {
-    const { type, source_account, target_account, amount, note, pending, pin } = await req.json();
+  export async function POST(req: NextRequest) {
+    console.log('[POST /api/transactions] Request received');
+    let client;
+    try {
+      const body = await req.json();
+      console.log('[POST /api/transactions] Payload:', body);
+      const { type, source_account, target_account, amount, note, pending, pin } = body;
     const session = req.cookies.get('session')?.value;
     const t: TxType = type;
     const amt = Number(amount);
@@ -171,6 +174,7 @@ export async function POST(req: NextRequest) {
 
     client = await pool.connect();
     await client.query('BEGIN');
+    await client.query(`SET LOCAL lock_timeout = '3s'`);
 
     // 1. Acquire locks in deterministic order to prevent deadlocks and race conditions
     const accountsToLock = [source_account];
@@ -181,8 +185,15 @@ export async function POST(req: NextRequest) {
     accountsToLock.sort();
 
     for (const acc of accountsToLock) {
-      // Use FOR UPDATE to lock the row until transaction commit
-      await client.query('SELECT 1 FROM accounts WHERE account_number = $1 FOR UPDATE', [acc]);
+      try {
+        // Use FOR UPDATE NOWAIT to fail fast if row is locked elsewhere
+        await client.query('SELECT 1 FROM accounts WHERE account_number = $1 FOR UPDATE NOWAIT', [acc]);
+      } catch (e: any) {
+        if (String(e?.code) === '55P03') {
+          throw new Error('Account is busy. Please try again.');
+        }
+        throw e;
+      }
     }
 
     // 2. Load source (and target if needed) - now safe because rows are locked

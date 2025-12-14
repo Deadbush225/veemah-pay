@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header } from '@/components/nav/Header';
 import { useLanguage } from '@/components/ui/LanguageProvider';
 import { ParallaxBackground } from '@/components/landing/ParallaxBackground';
@@ -105,11 +106,11 @@ export default function LoginPage() {
                 </button>
                 
                 <div style={{ textAlign: 'center', marginTop: 16 }}>
-                  <a href="/forgot-password" style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: 500 }}>Forgot your password?</a>
+                  <Link href="/forgot-password" style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: 500 }}>Forgot your password?</Link>
                 </div>
 
                 <div style={{ textAlign: 'center', marginTop: 8, color: 'var(--muted)', fontSize: '14px' }}>
-                  Don't have an account? <a href="/signup" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign up</a>
+                  Don't have an account? <Link href="/signup" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign up</Link>
                 </div>
               </div>
             </div>

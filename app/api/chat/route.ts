@@ -98,15 +98,24 @@ export async function POST(req: NextRequest) {
           let transactions = "No recent transactions.";
           try {
               const txRes = await pool.query(
-                `SELECT type, amount::float as amount, status, created_at, target_account 
+                `SELECT type, amount::float as amount, status, created_at, account_number, target_account 
                 FROM transactions 
-                WHERE account_number = $1 
+                WHERE account_number = $1 OR target_account = $1
                 ORDER BY created_at DESC LIMIT 5`,
                 [session]
               );
               recentTx = txRes.rows;
               if (recentTx.length > 0) {
-                  transactions = recentTx.map((t: any) => `- ${t.type.toUpperCase()} of ₱${t.amount} (${t.status}) on ${new Date(t.created_at).toLocaleDateString()}`).join('\n');
+                  transactions = recentTx.map((t: any) => {
+                    const isCredit = t.target_account === session && t.type === 'transfer';
+                    const isDebit = t.account_number === session;
+                    const sign = isCredit ? '+' : (isDebit && t.type !== 'deposit' ? '-' : ''); 
+                    // Deposit is credit to balance, but logged as source_account for simplicity in this schema? 
+                    // Actually in the deposit logic: update accounts set balance = balance + amt where account_number = source.
+                    // So for deposit, source is the beneficiary.
+                    
+                    return `- ${t.type.toUpperCase()} ₱${t.amount} (${t.status}) on ${new Date(t.created_at).toLocaleDateString()}`;
+                  }).join('\n');
               }
           } catch (e) {
               console.error("User tx fetch failed:", e);
@@ -168,18 +177,40 @@ export async function POST(req: NextRequest) {
 
   if (canUseGemini) {
     try {
-      console.log("Chat - Attempting Gemini API call...");
       const contents = (history || []).map((msg: any) => ({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: msg.content }] }));
       contents.push({ role: 'user', parts: [{ text: systemPrompt + "\n\nUser Message: " + message }] });
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents }) });
-      const data = await response.json();
-      if (!response.ok) {
-        console.error("Gemini API Error:", data);
-        throw new Error(data.error?.message || 'Failed to fetch from Gemini');
+
+      const models = [
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro-latest'
+      ];
+
+      for (const m of models) {
+        try {
+          console.log("Chat - Gemini attempt:", m);
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents })
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            console.error("Gemini API Error:", { model: m, status: response.status, data });
+            continue;
+          }
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply && typeof reply === 'string' && reply.trim().length > 0) {
+            console.log("Chat - Gemini Success:", m);
+            return NextResponse.json({ reply });
+          }
+        } catch (innerErr) {
+          console.error("Gemini attempt failed:", { model: m, err: innerErr });
+          continue;
+        }
       }
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand that.";
-      console.log("Chat - Gemini Success");
-      return NextResponse.json({ reply });
+      console.error("Chat - All Gemini model attempts failed, using Smart Mode");
     } catch (err) {
       console.error("Chat - Gemini Exception:", err);
     }
@@ -216,10 +247,12 @@ export async function POST(req: NextRequest) {
         reply = "To deposit, go to your Dashboard and click 'Deposit'. You can add funds instantly.";
       } else if (/transfer|send/i.test(lowerMsg)) {
         reply = "You can transfer money by clicking 'Transfer' in your Dashboard. You'll need the recipient's account number.";
+      } else if (/withdraw/i.test(lowerMsg)) {
+        reply = "To withdraw funds, use the 'Withdraw' card on your dashboard. You'll need your PIN.";
       } else if (/status/i.test(lowerMsg)) {
         reply = `Your account status is currently **${user.status}**.`;
       } else {
-        reply = `I'm in **Offline Mode** right now, but I can still help!\n\nTry asking:\n• "What is my balance?"\n• "Show my transactions"\n• "How to deposit?"`;
+        reply = `I'm in **Smart Mode** (AI Offline). I can help with basic tasks!\n\nTry asking:\n• "What is my balance?"\n• "Show my transactions"\n• "How to withdraw?"`;
       }
     }
   } else {

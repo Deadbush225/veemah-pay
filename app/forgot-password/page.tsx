@@ -2,33 +2,40 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
-
+import { Modal } from '@/components/ui/Modal';
 import { useLanguage } from '@/components/ui/LanguageProvider';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const { t } = useLanguage();
   const [step, setStep] = useState<"email" | "code">("email");
+  const [phase, setPhase] = useState<"code" | "password">("code");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [newPin, setNewPin] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
 
   const sendCode = async () => {
     if (!email) { setError("Enter your email"); return; }
     setPending(true);
     setError(null);
-    try {
+  try {
       const res = await fetch("/api/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to send code");
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to send code");
       setMessage(data.message);
+      if (process.env.NEXT_PUBLIC_DEV_SHOW_RESET_CODE === "1" || process.env.NEXT_PUBLIC_DEV_SHOW_RESET_CODE === "true") {
+        if (data.dev_code) setDevCode(data.dev_code);
+      }
       setStep("code");
     } catch (e: any) {
       setError(e.message);
@@ -38,19 +45,41 @@ export default function ForgotPasswordPage() {
   };
 
   const resetPassword = async () => {
-    if (!code || !newPin) { setError("Fill all fields"); return; }
+    if (!code) { setError("Enter the code"); return; }
+    if (phase === "code") {
+      if (!/^[0-9]{6}$/.test(code.trim())) { setError("Code must be 6 digits"); return; }
+      
+      setPending(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/verify-reset-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, code }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Invalid code");
+        setPhase("password");
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (newPassword !== confirmPassword) { setError("Passwords do not match"); return; }
     setPending(true);
     setError(null);
     try {
       const res = await fetch("/api/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, new_pin: newPin }),
+        body: JSON.stringify({ email, code, new_password: newPassword }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Reset failed");
-      alert("Password reset successful! Please login.");
-      router.push("/login");
+      setSuccessModalOpen(true);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -71,6 +100,7 @@ export default function ForgotPasswordPage() {
             
             {error && <div style={{ color: "var(--danger)", background: 'rgba(255,0,0,0.1)', padding: '10px', borderRadius: '8px', marginBottom: 16, fontSize: '14px' }}>{error}</div>}
             {message && <div style={{ color: "var(--success)", background: 'rgba(0,255,0,0.1)', padding: '10px', borderRadius: '8px', marginBottom: 16, fontSize: '14px' }}>{message}</div>}
+            {devCode && <div style={{ color: "var(--text)", background: 'rgba(0,0,0,0.08)', padding: '10px', borderRadius: '8px', marginBottom: 16, fontSize: '14px' }}>DEV Code: <strong>{devCode}</strong></div>}
             
             {step === "email" ? (
               <div style={{ display: "grid", gap: 16, width: "100%" }}>
@@ -79,7 +109,7 @@ export default function ForgotPasswordPage() {
                   placeholder={t('login.email')} 
                   value={email} 
                   onChange={e => setEmail(e.target.value)}
-                  style={{ padding: '12px' }}
+                  style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
                 />
                 <button className="btn primary" onClick={sendCode} disabled={pending} style={{ padding: '12px' }}>
                   {pending ? t('forgot.sending') : t('forgot.send_code')}
@@ -91,24 +121,56 @@ export default function ForgotPasswordPage() {
                   placeholder={t('forgot.code_placeholder')} 
                   value={code} 
                   onChange={e => setCode(e.target.value)} 
-                  style={{ padding: '12px' }}
+                  style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
                 />
-                <input 
-                  type="password" 
-                  placeholder={t('forgot.new_pin_placeholder')} 
-                  value={newPin} 
-                  onChange={e => setNewPin(e.target.value)} 
-                  style={{ padding: '12px' }}
-                />
-                <button className="btn primary" onClick={resetPassword} disabled={pending} style={{ padding: '12px' }}>
-                  {pending ? t('forgot.resetting') : t('forgot.reset_btn')}
-                </button>
+                {phase === "code" ? (
+                  <button className="btn primary" onClick={resetPassword} disabled={pending} style={{ padding: '12px' }}>
+                    {t('forgot.continue')}
+                  </button>
+                ) : (
+                  <>
+                    <input 
+                      type="password" 
+                      placeholder={t('forgot.new_password_placeholder')} 
+                      value={newPassword} 
+                      onChange={e => setNewPassword(e.target.value)} 
+                      style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
+                    />
+                    <input 
+                      type="password" 
+                      placeholder={t('forgot.confirm_password_placeholder')} 
+                      value={confirmPassword} 
+                      onChange={e => setConfirmPassword(e.target.value)} 
+                      style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
+                    />
+                    <button className="btn primary" onClick={resetPassword} disabled={pending} style={{ padding: '12px' }}>
+                      {pending ? t('forgot.resetting') : t('forgot.reset_btn')}
+                    </button>
+                  </>
+                )}
                 <button className="btn ghost" onClick={() => setStep("email")}>{t('forgot.back')}</button>
               </div>
             )}
           </div>
         </div>
       </section>
+
+      <Modal open={successModalOpen} onClose={() => router.push("/login")}>
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+          <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Password Updated!</h3>
+          <p style={{ color: 'var(--muted)', marginBottom: '24px' }}>
+            Your password has been successfully reset. You can now login with your new credentials.
+          </p>
+          <button 
+            className="btn primary" 
+            onClick={() => router.push("/login")}
+            style={{ width: '100%', padding: '12px' }}
+          >
+            Login Now
+          </button>
+        </div>
+      </Modal>
     </main>
   );
 }

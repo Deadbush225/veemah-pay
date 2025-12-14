@@ -26,3 +26,4 @@ pnpm-debug.log*
 
 # Misc
 .pnpm-store/
+tsconfig.tsbuildinfo

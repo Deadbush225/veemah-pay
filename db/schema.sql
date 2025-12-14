@@ -5,11 +5,11 @@ CREATE TABLE IF NOT EXISTS accounts (
   account_number VARCHAR(5) PRIMARY KEY,
   name           VARCHAR(100)    NOT NULL,
   balance        NUMERIC(12,2)   NOT NULL DEFAULT 0,
-  pin            VARCHAR(4)      NOT NULL,
+  pin            VARCHAR(5)      NOT NULL,
   status         VARCHAR(10)     NOT NULL,
   failed_attempts INTEGER        NOT NULL DEFAULT 0,
   CONSTRAINT status_check CHECK (status IN ('Active','Locked','Archived')),
-  CONSTRAINT pin_format_check CHECK (pin ~ '^[0-9]{4}$')
+  CONSTRAINT pin_format_check CHECK (pin ~ '^[0-9]{4,5}$')
 );
 
 -- Optional: record transactions for auditing
