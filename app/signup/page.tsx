@@ -193,7 +193,7 @@ export default function SignupPage() {
         <label style={{ display: 'block', marginBottom: 6, fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>{t('signup.email')}</label>
         <input placeholder={t('signup.email_placeholder')} type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ padding: '12px 16px', fontSize: '16px', background: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--border)' }} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="hBox">
         <div>
           <label style={{ display: 'block', marginBottom: 6, fontSize: '14px', fontWeight: 500 }}>{t('signup.password')}</label>
           <input placeholder={t('signup.password_placeholder')} type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '12px 16px', fontSize: '16px' }} />
@@ -203,7 +203,7 @@ export default function SignupPage() {
           <input placeholder={t('signup.confirm_password_placeholder')} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ padding: '12px 16px', fontSize: '16px' }} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="hBox">
         <div>
           <label style={{ display: 'block', marginBottom: 6, fontSize: '14px', fontWeight: 500 }}>{t('signup.pin')}</label>
           <input placeholder={t('signup.pin_placeholder')} value={pin} onChange={e => setPin(e.target.value)} maxLength={5} style={{ padding: '12px 16px', fontSize: '16px' }} />

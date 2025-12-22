@@ -32,6 +32,23 @@
 
 * { box-sizing: border-box; }
 
+* { 
+  box-sizing: border-box;
+}
+
+/* Smooth theme transitions */
+*,
+*::before,
+*::after {
+  transition: 
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
 html, body { height: 100%; }
 
 body {
@@ -167,3 +184,22 @@ input, select { width: 100%; border: 1px solid var(--border); border-radius: 10p
 .hamburger span { width: 18px; height: 2px; background: var(--text); display: block; }
 .quick-info { display: grid; }
 .quick-info .muted { font-size: 12px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━ Mobile Resize ━━━━━━━━━━━━━━━━━━━━━━━━ */
+@media screen and (max-width: 500px) {
+    .site-header .inner {
+        padding: 8px 24px;
+    }
+    
+    section {
+        padding: 6px !important;
+    }
+
+    .container .card {
+        padding: 30px !important;
+    }
+
+    .hBox{
+        grid-template-columns: 1fr !important;
+    }
+}
