@@ -184,3 +184,22 @@ input, select { width: 100%; border: 1px solid var(--border); border-radius: 10p
 .hamburger span { width: 18px; height: 2px; background: var(--text); display: block; }
 .quick-info { display: grid; }
 .quick-info .muted { font-size: 12px; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━ Mobile Resize ━━━━━━━━━━━━━━━━━━━━━━━━ */
+@media screen and (max-width: 500px) {
+    .site-header .inner {
+        padding: 8px 24px;
+    }
+    
+    section {
+        padding: 6px !important;
+    }
+
+    .container .card {
+        padding: 30px !important;
+    }
+
+    .hBox{
+        grid-template-columns: 1fr !important;
+    }
+}
