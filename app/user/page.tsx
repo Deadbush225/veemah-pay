@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
 import { SpendingGraph } from '@/components/dashboard/SpendingGraph';
 import { useLanguage } from '@/components/ui/LanguageProvider';
+import { QRModal } from '@/components/ui/QRModal';
 
 type Account = { account_number: string; name: string; balance: number; status: string };
 type Transaction = { id: number; type: string; status: string; amount: number; target_account?: string | null; note?: string | null; created_at?: string };
@@ -21,6 +22,8 @@ export default function UserPage() {
   const [txTarget, setTxTarget] = useState("");
   const [txPin, setTxPin] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrMode, setQrMode] = useState<"display" | "scan">("display");
 
   const readJson = async (res: Response) => {
     try {
@@ -236,6 +239,21 @@ export default function UserPage() {
     }
   };
 
+  const handleShowMyQR = () => {
+    setQrMode("display");
+    setQrModalOpen(true);
+  };
+
+  const handleScanQR = () => {
+    setQrMode("scan");
+    setQrModalOpen(true);
+  };
+
+  const handleAccountScanned = (scannedAccount: string) => {
+    setTxTarget(scannedAccount);
+    setQrModalOpen(false);
+  };
+
   return (
     <main>
       <Header />
@@ -266,10 +284,37 @@ export default function UserPage() {
             </div>
             <div className="card">
               <h3>{t('dash.transfer')}</h3>
-              <input placeholder={t('dash.target')} value={txTarget} onChange={e => setTxTarget(e.target.value)} />
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <input 
+                  placeholder={t('dash.target')} 
+                  value={txTarget} 
+                  onChange={e => setTxTarget(e.target.value)} 
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  className="btn ghost" 
+                  onClick={handleScanQR}
+                  title="Scan QR Code"
+                  style={{ padding: '8px 12px', fontSize: '14px' }}
+                >
+                  📷 Scan
+                </button>
+              </div>
               <input placeholder={t('dash.amount')} value={txAmount} onChange={e => setTxAmount(e.target.value)} />
               <input type="password" placeholder={t('user.pin_placeholder')} value={txPin} onChange={e => setTxPin(e.target.value)} maxLength={5} style={{ marginTop: 8 }} />
-              <button className="btn" onClick={doTransfer} disabled={pending}>{t('dash.transfer')}</button>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button className="btn" onClick={doTransfer} disabled={pending} style={{ flex: 1 }}>
+                  {t('dash.transfer')}
+                </button>
+                <button 
+                  className="btn ghost" 
+                  onClick={handleShowMyQR}
+                  title="Show My QR Code"
+                  style={{ padding: '8px 12px', fontSize: '14px' }}
+                >
+                  📱 My QR
+                </button>
+              </div>
             </div>
           </div>
 
@@ -307,6 +352,14 @@ export default function UserPage() {
           </div>
         </div>
       </section>
+
+      <QRModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        mode={qrMode}
+        accountNumber={me?.account_number}
+        onAccountScanned={handleAccountScanned}
+      />
     </main>
   );
 }

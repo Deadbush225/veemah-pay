@@ -16,6 +16,7 @@ type AuthContextType = {
   me: Me | null;
   setMe: (me: Me) => void;
   logout: () => Promise<void>;
+  refreshMe: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -24,15 +25,15 @@ export function AuthProvider({ children, initialMe }: {
   children: React.ReactNode; 
   initialMe: Me | null;
 }) {
-  // Initialize with a safe default to avoid null checks in consumers
-  const [me, setMe] = useState<Me | null>(initialMe ?? { authenticated: false });
+  const [me, setMe] = useState<Me | null>(initialMe || { authenticated: false });
   const router = useRouter();
 
-  // Ensure client state syncs with server-provided initialMe after hydration.
-  // This avoids cases where initialMe might not be available immediately on the client.
+  // Sync with server-provided initialMe after hydration
   useEffect(() => {
-    if (initialMe) setMe(initialMe);
-  }, [initialMe]);
+    if (initialMe && initialMe.authenticated !== me?.authenticated) {
+      setMe(initialMe);
+    }
+  }, [initialMe, me?.authenticated]);
 
   const logout = async () => {
     await fetch("/api/logout", { method: "POST" });
@@ -40,7 +41,7 @@ export function AuthProvider({ children, initialMe }: {
     router.replace("/");
   };
 
-  // Optional: refresh user data when needed
+  // Refresh user data when needed
   const refreshMe = async () => {
     try {
       const response = await fetch("/api/me");
@@ -52,7 +53,7 @@ export function AuthProvider({ children, initialMe }: {
   };
 
   return (
-    <AuthContext.Provider value={{ me, setMe, logout }}>
+    <AuthContext.Provider value={{ me, setMe, logout, refreshMe }}>
       {children}
     </AuthContext.Provider>
   );

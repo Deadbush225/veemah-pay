@@ -26,6 +26,7 @@ type Me = {
 async function getServerMe(): Promise<Me> {
   try {
     const session = cookies().get('session')?.value;
+    
     if (!session) {
       return { authenticated: false };
     }
@@ -49,6 +50,7 @@ async function getServerMe(): Promise<Me> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const langCookie = cookies().get('language')?.value as 'en' | 'tl' | undefined;
   const initialMe = await getServerMe();
+  
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

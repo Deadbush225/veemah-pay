@@ -3,12 +3,14 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
 import { useLanguage } from '@/components/ui/LanguageProvider';
+import { useAuth } from '@/components/ui/AuthProvider';
 import { ParallaxBackground } from '@/components/landing/ParallaxBackground';
 import { Modal } from "@/components/ui/Modal";
 
 export default function SignupPage() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { setMe } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +79,13 @@ export default function SignupPage() {
         // Scroll to top to show verification panel clearly
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
+        // Update AuthProvider state with the authenticated user
+        const authData = {
+          authenticated: true,
+          account: data.account
+        };
+        setMe(authData);
+        
         const acc = data?.account?.account_number;
         if (acc === "0000") {
           router.replace("/admin");
@@ -108,6 +117,14 @@ export default function SignupPage() {
         setError(data?.error || "Verification failed");
         return;
       }
+      
+      // Update AuthProvider state with the authenticated user
+      const authData = {
+        authenticated: true,
+        account: data.account
+      };
+      setMe(authData);
+      
       const acc = data?.account?.account_number;
       if (acc === "0000") {
         router.replace("/admin");

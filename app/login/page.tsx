@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from '@/components/nav/Header';
 import { useLanguage } from '@/components/ui/LanguageProvider';
+import { useAuth } from '@/components/ui/AuthProvider';
 import { ParallaxBackground } from '@/components/landing/ParallaxBackground';
 
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { setMe } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,14 @@ export default function LoginPage() {
         setError(data?.error || "Login failed");
         return;
       }
+      
+      // Update AuthProvider state with the authenticated user
+      const authData = {
+        authenticated: true,
+        account: data.account
+      };
+      setMe(authData);
+      
       const acc = data?.account?.account_number;
       if (acc === "0000") {
         router.replace("/admin");
