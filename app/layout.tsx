@@ -56,7 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <meta name="color-scheme" content="dark light" />
         <Script id="theme-init" strategy="beforeInteractive">
-          {`(function(){try{var s=localStorage.getItem('theme');var d=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var t=s?s:(d?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`}
+          {`(function(){try{var s=localStorage.getItem('theme');if(s==='light'){document.documentElement.setAttribute('data-theme','light');return;}if(s==='dark'){return;}var d=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches;if(d){document.documentElement.setAttribute('data-theme','light');localStorage.setItem('theme','light');}else{localStorage.setItem('theme','dark');}}catch(e){}})()`}
         </Script>
       </head>
       <body>
