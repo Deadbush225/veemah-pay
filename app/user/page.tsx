@@ -5,6 +5,7 @@ import { Header } from '@/components/nav/Header';
 import { SpendingGraph } from '@/components/dashboard/SpendingGraph';
 import { useLanguage } from '@/components/ui/LanguageProvider';
 import { QRModal } from '@/components/ui/QRModal';
+import { MoneyDisplay, PositiveMoney } from '@/components/ui/MoneyDisplay';
 
 type Account = { account_number: string; name: string; balance: number; status: string };
 type Transaction = { id: number; type: string; status: string; amount: number; target_account?: string | null; note?: string | null; created_at?: string };
@@ -282,7 +283,7 @@ export default function UserPage() {
               <div>{t('dash.account')}: {me.account_number}</div>
               <div>{t('dash.name')}: {me.name}</div>
               <div>{t('dash.status')}: {me.status}</div>
-              <div>{t('dash.balance')}: ₱{Number(me.balance).toFixed(2)}</div>
+              <div>{t('dash.balance')}: <MoneyDisplay amount={me.balance} /></div>
             </div>
           )}
           {error && <div style={{ color: "#b00020" }}>{error}</div>}
@@ -384,11 +385,11 @@ export default function UserPage() {
                             {t.status}
                           </span>
                         </td>
-                        <td className="num" style={{ 
-                          color: isIncoming ? '#4caf50' : isOutgoing ? '#f44336' : '#333',
-                          fontWeight: 'bold'
-                        }}>
-                          {isIncoming ? '+' : isOutgoing ? '-' : ''}₱{Number(t.amount).toFixed(2)}
+                        <td className="num">
+                          <PositiveMoney 
+                            amount={isIncoming ? t.amount : -t.amount} 
+                            className="num"
+                          />
                         </td>
                         <td>{t.created_at ? new Date(t.created_at).toLocaleDateString() : '-'}</td>
                       </tr>
