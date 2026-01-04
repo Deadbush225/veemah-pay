@@ -13,6 +13,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { t } = useLanguage();
   const [me, setMe] = useState<Account | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -29,7 +30,9 @@ export default function AdminPage() {
     const data = await res.json();
     if (!data.authenticated) { router.replace("/login"); return; }
     setMe(data.account);
-    if (data.account.account_number !== "0000") { router.replace("/login"); return; }
+    const admin = !!data?.isAdmin || String(data?.account?.account_number ?? "") === "0000";
+    setIsAdmin(admin);
+    if (!admin) { router.replace("/login"); return; }
   };
 
   const fetchAccounts = async () => {
@@ -46,7 +49,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => { fetchMe(); }, []);
-  useEffect(() => { if (me && me.account_number === "0000") fetchAccounts(); }, [me]);
+  useEffect(() => { if (me && isAdmin) fetchAccounts(); }, [me, isAdmin]);
   useEffect(() => { if (selected) { setEditName(selected.name); setEditStatus(selected.status); fetchTransactions(selected.account_number); } }, [selected]);
 
   const updateInfo = async (statusOverride?: string) => {

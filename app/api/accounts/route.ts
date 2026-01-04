@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 
+async function getAdminWhereClause() {
+  const colRes = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'accounts'`
+  );
+  const cols: string[] = colRes.rows.map((r: any) => r.column_name);
+  const hasRole = cols.includes('role');
+  const hasEmail = cols.includes('email');
+  const parts: string[] = [`account_number = '0000'`];
+  if (hasRole) {
+    parts.push(`LOWER(COALESCE(role,'')) IN ('admin','super_admin')`);
+  }
+  if (hasEmail) {
+    parts.push(`email ILIKE '%@veemahpay.com'`);
+  }
+  return { adminWhere: parts.join(' OR ') };
+}
+
+async function isAdminSession(session: string) {
+  if (String(session) === '0000') return true;
+  const { adminWhere } = await getAdminWhereClause();
+  const res = await pool.query(`SELECT 1 FROM accounts WHERE account_number = $1 AND (${adminWhere})`, [session]);
+  return (res.rowCount ?? 0) > 0;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -29,9 +53,9 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = req.cookies.get('session')?.value;
-    if (session !== '0000') {
-      return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
-    }
+    if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const isAdmin = await isAdminSession(session);
+    if (!isAdmin) return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
 
     const url = new URL(req.url);
     const confirm = (url.searchParams.get('confirm') || '').toLowerCase();
@@ -42,11 +66,13 @@ export async function DELETE(req: NextRequest) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const { adminWhere } = await getAdminWhereClause();
 
       // Remove transactions referencing non-admin accounts (source or target)
       await client.query(
         `DELETE FROM transactions
-         WHERE (account_number <> '0000') OR (target_account IS NOT NULL AND target_account <> '0000')`
+         WHERE (account_number NOT IN (SELECT account_number FROM accounts WHERE ${adminWhere}))
+            OR (target_account IS NOT NULL AND target_account NOT IN (SELECT account_number FROM accounts WHERE ${adminWhere}))`
       );
 
       // Optional: remove users referencing non-admin accounts, if users table exists
@@ -54,11 +80,11 @@ export async function DELETE(req: NextRequest) {
         `SELECT 1 FROM information_schema.tables WHERE table_name = 'users'`
       );
       if ((hasUsers.rowCount ?? 0) > 0) {
-        await client.query(`DELETE FROM users WHERE account_number <> '0000'`);
+        await client.query(`DELETE FROM users WHERE account_number NOT IN (SELECT account_number FROM accounts WHERE ${adminWhere})`);
       }
 
       // Finally, remove all non-admin accounts
-      await client.query(`DELETE FROM accounts WHERE account_number <> '0000'`);
+      await client.query(`DELETE FROM accounts WHERE NOT (${adminWhere})`);
 
       await client.query('COMMIT');
       return new NextResponse(null, { status: 204 });

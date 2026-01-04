@@ -36,12 +36,13 @@ export default function LoginPage() {
       // Update AuthProvider state with the authenticated user
       const authData = {
         authenticated: true,
-        account: data.account
+        account: data.account,
+        isAdmin: !!data?.isAdmin
       };
       setMe(authData);
       
-      const acc = data?.account?.account_number;
-      if (acc === "0000") {
+      const isAdmin = !!data?.isAdmin || String(data?.account?.account_number ?? "") === "0000";
+      if (isAdmin) {
         router.replace("/admin");
       } else {
         router.replace("/user");

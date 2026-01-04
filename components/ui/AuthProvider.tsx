@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Me = { 
@@ -8,8 +8,12 @@ type Me = {
     account_number: string; 
     name: string; 
     balance: number; 
-    status: string 
-  } 
+    status: string;
+    email?: string;
+    role?: string;
+    hasPassword?: boolean;
+  };
+  isAdmin?: boolean;
 };
 
 type AuthContextType = {
@@ -38,7 +42,7 @@ export function AuthProvider({ children, initialMe }: {
     }
   }, [initialMe]); // Removed me?.authenticated dependency to prevent loops
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await fetch("/api/logout", { method: "POST" });
       setMe({ authenticated: false });
@@ -49,10 +53,10 @@ export function AuthProvider({ children, initialMe }: {
       setMe({ authenticated: false });
       router.replace("/");
     }
-  };
+  }, [router]);
 
   // Refresh user data when needed
-  const refreshMe = async () => {
+  const refreshMe = useCallback(async () => {
     try {
       const response = await fetch("/api/me");
       const data = await response.json();
@@ -60,7 +64,7 @@ export function AuthProvider({ children, initialMe }: {
     } catch (error) {
       setMe({ authenticated: false });
     }
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ me, setMe, logout, refreshMe }}>

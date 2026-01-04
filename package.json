@@ -9,7 +9,8 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d",
-    "db:psql": "docker compose exec postgres psql -U postgres -d bank_db"
+    "db:psql": "docker compose exec postgres psql -U postgres -d bank_db",
+    "db:migrate": "node scripts/migrate.js"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -43,20 +43,34 @@ export async function POST(req: NextRequest) {
     );
     if (pendingRes.rowCount === 0) {
       // If no pending signup, try existing account (may have been created already)
+      const colCheck = await pool.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'accounts'`
+      );
+      const cols: string[] = colCheck.rows.map((r: any) => r.column_name);
+      const hasEmail = cols.includes('email');
+      const hasRole = cols.includes('role');
       const accRes = await pool.query(
-        `SELECT account_number, name, balance::float AS balance, status, email FROM accounts WHERE email = $1`,
+        `SELECT account_number, name, balance::float AS balance, status${hasEmail ? ', email' : ''}${hasRole ? ', role' : ''} FROM accounts WHERE email = $1`,
         [email]
       );
       if (accRes.rowCount === 0) {
         return NextResponse.json({ error: 'Account not found' }, { status: 404 });
       }
       const existing = accRes.rows[0];
-      const res = NextResponse.json({ account: existing, verified: true });
+      const isAdminEmail = hasEmail && typeof existing.email === 'string' && existing.email.toLowerCase().endsWith('@veemahpay.com');
+      const isAdminRole = hasRole && ['admin', 'super_admin'].includes(String(existing.role || '').toLowerCase());
+      const isAdmin = String(existing.account_number) === '0000' || isAdminRole || isAdminEmail;
+      const res = NextResponse.json({ account: existing, verified: true, isAdmin });
       res.cookies.set('session', String(existing.account_number), {
         httpOnly: true,
         maxAge: 60 * 60,
         path: '/',
       });
+      if (isAdmin) {
+        res.cookies.set('session_admin', '1', { httpOnly: true, maxAge: 60 * 60, path: '/' });
+      } else {
+        res.cookies.set('session_admin', '', { httpOnly: true, maxAge: 0, path: '/' });
+      }
       return res;
     }
 
@@ -70,6 +84,7 @@ export async function POST(req: NextRequest) {
     const hasEmail = cols.includes('email');
     const hasPassword = cols.includes('password');
     const hasTerms = cols.includes('terms_accepted');
+    const hasRole = cols.includes('role');
 
     const lenRes = await pool.query(
       `SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'account_number'`
@@ -110,19 +125,33 @@ export async function POST(req: NextRequest) {
       values.push(pending.terms_accepted);
       placeholders.push(`$${pIdx++}`);
     }
-    const sql = `INSERT INTO accounts (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING account_number, name, balance::float AS balance, status${hasEmail ? ', email' : ''}`;
+    if (hasRole) {
+      const isAdminEmail = String(email).toLowerCase().endsWith('@veemahpay.com');
+      columns.push('role');
+      values.push(isAdminEmail ? 'admin' : 'user');
+      placeholders.push(`$${pIdx++}`);
+    }
+    const sql = `INSERT INTO accounts (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING account_number, name, balance::float AS balance, status${hasEmail ? ', email' : ''}${hasRole ? ', role' : ''}`;
     const inserted = await pool.query(sql, values);
     const account = inserted.rows[0];
 
     // Cleanup pending record
     await pool.query('DELETE FROM pending_signups WHERE email = $1', [email]);
 
-    const res = NextResponse.json({ account, verified: true });
+    const isAdminEmail = hasEmail && String(email).toLowerCase().endsWith('@veemahpay.com');
+    const isAdminRole = hasRole && ['admin', 'super_admin'].includes(String(account.role || '').toLowerCase());
+    const isAdmin = String(account.account_number) === '0000' || isAdminRole || isAdminEmail;
+    const res = NextResponse.json({ account, verified: true, isAdmin });
     res.cookies.set('session', String(account.account_number), {
       httpOnly: true,
       maxAge: 60 * 60,
       path: '/',
     });
+    if (isAdmin) {
+      res.cookies.set('session_admin', '1', { httpOnly: true, maxAge: 60 * 60, path: '/' });
+    } else {
+      res.cookies.set('session_admin', '', { httpOnly: true, maxAge: 0, path: '/' });
+    }
     return res;
   } catch (err: any) {
     console.error('[VERIFY EMAIL ERROR]', err);

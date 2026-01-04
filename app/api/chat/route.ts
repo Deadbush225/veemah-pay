@@ -3,6 +3,23 @@ import { pool } from '@/lib/db';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+async function isAdminSession(session: string) {
+  if (String(session) === '0000') return true;
+  const colsRes = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'accounts'`
+  );
+  const cols: string[] = colsRes.rows.map((r: any) => r.column_name);
+  const hasRole = cols.includes('role');
+  const hasEmail = cols.includes('email');
+  const selectCols = `account_number${hasRole ? ', role' : ''}${hasEmail ? ', email' : ''}`;
+  const res = await pool.query(`SELECT ${selectCols} FROM accounts WHERE account_number = $1`, [session]);
+  if ((res.rowCount ?? 0) === 0) return false;
+  const row = res.rows[0];
+  const isAdminEmail = hasEmail && typeof row.email === 'string' && row.email.toLowerCase().endsWith('@veemahpay.com');
+  const isAdminRole = hasRole && ['admin', 'super_admin'].includes(String(row.role || '').toLowerCase());
+  return isAdminRole || isAdminEmail || String(row.account_number) === '0000';
+}
+
 export async function POST(req: NextRequest) {
   const { message, history } = await req.json();
   const session = req.cookies.get('session')?.value;
@@ -15,7 +32,8 @@ export async function POST(req: NextRequest) {
 
   if (session) {
     try {
-      if (session === '0000') {
+      const isAdmin = await isAdminSession(session);
+      if (isAdmin) {
         // --- ADMIN LOGIC ---
         user = { name: "Administrator", account_number: "0000", status: "Active" };
         
@@ -213,7 +231,8 @@ export async function POST(req: NextRequest) {
   let reply = "Sorry, I am currently offline.";
   
   if (user) {
-    if (session === '0000') {
+    const isAdmin = session ? await isAdminSession(session) : false;
+    if (isAdmin) {
        // Admin Mock
        if (/status|health|users/i.test(message)) {
          reply = `**System Health**\n• Accounts: ${stats.total_accounts}\n• Active: ${stats.active_count}\n• Locked: ${stats.locked_count}\n• Total Funds: ₱${Number(stats.total_balance).toLocaleString()}`;

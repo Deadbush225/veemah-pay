@@ -9,13 +9,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const pendTable = await pool.query(`SELECT to_regclass('public.pending_signups') AS r`);
-    if (!pendTable.rows?.[0]?.r) {
-      return NextResponse.json({ error: 'Database missing pending_signups table. Run migrations.' }, { status: 500 });
-    }
-    const pendRes = await pool.query(`SELECT 1 FROM pending_signups WHERE email = $1`, [em]);
-    if (pendRes.rowCount === 0) {
-      return NextResponse.json({ error: 'No pending signup found for this email' }, { status: 404 });
+    const session = req.cookies.get('session')?.value;
+    if (!session) {
+      const pendTable = await pool.query(`SELECT to_regclass('public.pending_signups') AS r`);
+      if (!pendTable.rows?.[0]?.r) {
+        return NextResponse.json({ error: 'Database missing pending_signups table. Run migrations.' }, { status: 500 });
+      }
+      const pendRes = await pool.query(`SELECT 1 FROM pending_signups WHERE email = $1`, [em]);
+      if (pendRes.rowCount === 0) {
+        return NextResponse.json({ error: 'No pending signup found for this email' }, { status: 404 });
+      }
+    } else {
+      const exists = await pool.query(
+        `SELECT 1 FROM public.accounts WHERE email IS NOT NULL AND LOWER(email) = LOWER($1) AND account_number <> $2`,
+        [em, session]
+      );
+      if ((exists.rowCount ?? 0) > 0) {
+        return NextResponse.json({ error: 'Email already in use' }, { status: 409 });
+      }
     }
 
     const verTable = await pool.query(`SELECT to_regclass('public.email_verification_codes') AS r`);
@@ -28,7 +39,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO email_verification_codes (email, account_number, code, expires_at, created_at, verified_at)
        VALUES ($1,$2,$3,$4,now(),NULL)
        ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, expires_at = EXCLUDED.expires_at, account_number = EXCLUDED.account_number, verified_at = NULL, created_at = now()`,
-      [em, '-', code, expiresAt]
+      [em, req.cookies.get('session')?.value || '-', code, expiresAt]
     );
 
     if (process.env.RESEND_API_KEY) {

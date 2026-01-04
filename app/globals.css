@@ -199,6 +199,18 @@ input, select { width: 100%; border: 1px solid var(--border); border-radius: 10p
 .hamburger span { width: 18px; height: 2px; background: var(--text); display: block; }
 .quick-info { display: grid; }
 .quick-info .muted { font-size: 12px; }
+.notif-bell { position: relative; }
+.notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; display: grid; place-items: center; }
+.notif-modal { display: grid; gap: 12px; min-width: min(560px, 88vw); }
+.notif-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notif-modal-actions { display: inline-flex; gap: 8px; align-items: center; }
+.notif-list { display: grid; gap: 10px; max-height: 60vh; overflow: auto; padding-right: 2px; }
+.notif-item { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: var(--card); }
+.notif-item.unread { background: var(--accent-soft); border-color: rgba(57, 182, 255, 0.35); }
+.notif-item-head { display: flex; gap: 12px; align-items: start; justify-content: space-between; }
+.notif-title { font-weight: 650; }
+.notif-actions { display: inline-flex; gap: 8px; align-items: center; }
+.notif-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 12px; }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━ Flexible Utilities ━━━━━━━━━━━━━━━━━━━━━━ */
 .hBox-wrappper { display: flex; flex-wrap: wrap; gap: 16px; }

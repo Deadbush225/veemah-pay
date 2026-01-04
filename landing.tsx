@@ -32,6 +32,7 @@ export default function Landing98() {
   const [selected, setSelected] = useState<Account | null>(null);
   const [amount, setAmount] = useState<string>("");
   const [me, setMe] = useState<Account | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [accountNumber, setAccountNumber] = useState("");
   const [pin, setPin] = useState("");
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -98,18 +99,27 @@ export default function Landing98() {
         const res = await fetch("/api/me");
         if (res.ok) {
           const data = await res.json();
-          setMe(data.account);
-          // Load accounts if admin; otherwise load only after actions
-          if (data.account.account_number === "0000") {
-            fetchAccounts();
+          if (data?.authenticated) {
+            setMe(data.account);
+            const admin = !!data?.isAdmin;
+            setIsAdmin(admin);
+            if (admin) {
+              fetchAccounts();
+            } else {
+              setLoading(false);
+            }
           } else {
+            setMe(null);
+            setIsAdmin(false);
             setLoading(false);
           }
         } else {
           setMe(null);
+          setIsAdmin(false);
           setLoading(false);
         }
       } catch (e) {
+        setIsAdmin(false);
         setLoading(false);
       }
     })();
@@ -132,7 +142,7 @@ export default function Landing98() {
       fetchTransactions();
     } else {
       // If admin deselects, clear transactions list
-      if (me && me.account_number === "0000") {
+      if (isAdmin) {
         setTransactions([]);
       }
     }
@@ -141,7 +151,7 @@ export default function Landing98() {
 
   // Auto-load transactions for customer when filters change
   useEffect(() => {
-    if (me && me.account_number !== "0000") {
+    if (me && !isAdmin) {
       fetchTransactions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,7 +161,7 @@ export default function Landing98() {
     playClick();
     if (pending) return;
     // Use selected account if admin selected one; otherwise use the logged-in customer account
-    const target = selected ?? (me && me.account_number !== "0000" ? me : null);
+    const target = selected ?? (me && !isAdmin ? me : null);
     if (!target) {
       setError("Select an account first (admin) or log in as a customer.");
       return;
@@ -187,7 +197,7 @@ export default function Landing98() {
       setError(null);
       setAmount("");
       setSelected(null);
-      if (me && me.account_number !== "0000") {
+      if (me && !isAdmin) {
         await refreshMe();
       } else {
         await fetchAccounts();
@@ -203,7 +213,7 @@ export default function Landing98() {
     playClick();
     if (pending) return;
 
-    const source = selected ?? (me && me.account_number !== "0000" ? me : null);
+    const source = selected ?? (me && !isAdmin ? me : null);
     if (!source) {
       setError("Select a source account (admin) or log in as a customer.");
       return;
@@ -272,7 +282,7 @@ export default function Landing98() {
       setAmount("");
       setTransferTarget("");
       setSelected(null);
-      if (me && me.account_number !== "0000") {
+      if (me && !isAdmin) {
         await refreshMe();
       } else {
         await fetchAccounts();
@@ -289,7 +299,13 @@ export default function Landing98() {
       const res = await fetch("/api/me");
       if (res.ok) {
         const data = await res.json();
-        setMe(data.account);
+        if (data?.authenticated) {
+          setMe(data.account);
+          setIsAdmin(!!data?.isAdmin);
+        } else {
+          setMe(null);
+          setIsAdmin(false);
+        }
       }
     } catch {}
   };
@@ -298,7 +314,7 @@ export default function Landing98() {
     try {
       setTxLoading(true);
       setTxError(null);
-      const ctx = selected ?? (me && me.account_number !== "0000" ? me : null);
+      const ctx = selected ?? (me && !isAdmin ? me : null);
       if (!ctx) {
         setTransactions([]);
         setTxLoading(false);
@@ -358,7 +374,7 @@ export default function Landing98() {
     }
     setTxError(null);
     await fetchTransactions();
-    if (me && me.account_number !== "0000") await refreshMe(); else await fetchAccounts();
+    if (me && !isAdmin) await refreshMe(); else await fetchAccounts();
   };
 
   const voidTx = async (id: number) => {
@@ -376,7 +392,7 @@ export default function Landing98() {
     }
     setTxError(null);
     await fetchTransactions();
-    if (me && me.account_number !== "0000") await refreshMe(); else await fetchAccounts();
+    if (me && !isAdmin) await refreshMe(); else await fetchAccounts();
   };
 
   const rollbackTx = async (id: number) => {
@@ -394,7 +410,7 @@ export default function Landing98() {
     }
     setTxError(null);
     await fetchTransactions();
-    if (me && me.account_number !== "0000") await refreshMe(); else await fetchAccounts();
+    if (me && !isAdmin) await refreshMe(); else await fetchAccounts();
   };
 
   const updateInfo = async () => {
@@ -431,7 +447,7 @@ export default function Landing98() {
 
   const deleteAccount = async (acc: string) => {
     playClick();
-    if (me?.account_number !== "0000") {
+    if (!isAdmin) {
       setError("Only admin can delete accounts.");
       return;
     }
@@ -466,6 +482,7 @@ export default function Landing98() {
     playClick();
     await fetch("/api/logout", { method: "POST" });
     setMe(null);
+    setIsAdmin(false);
     setAccounts([]);
     setSelected(null);
   };
@@ -484,9 +501,10 @@ export default function Landing98() {
       return;
     }
     setMe(data.account);
+    setIsAdmin(!!data?.isAdmin);
     setAccountNumber("");
     setPin("");
-    if (data.account.account_number === "0000") {
+    if (!!data?.isAdmin) {
       fetchAccounts();
     }
   };
@@ -554,14 +572,14 @@ export default function Landing98() {
           {me && (
             <div className="field-row" style={{ gap: 8, marginBottom: 8, justifyContent: 'flex-end' }}>
               <button onClick={logout}>Logout</button>
-              {me.account_number === "0000" && (
+              {isAdmin && (
                 <button onClick={() => { playClick(); fetchAccounts(); }}>Refresh</button>
               )}
             </div>
           )}
           {me && (
             <div className="status-bar" style={{ marginBottom: 8 }}>
-              <p className="status-bar-field">{me.account_number === '0000' ? 'Admin mode' : 'Customer mode'}</p>
+              <p className="status-bar-field">{isAdmin ? 'Admin mode' : 'Customer mode'}</p>
             </div>
           )}
           {!me ? (
@@ -623,7 +641,7 @@ export default function Landing98() {
                 </>
               )}
             </>
-          ) : me.account_number === "0000" ? (
+          ) : isAdmin ? (
             <>
                 <div className="field-row" style={{ marginBottom: 8, gap: 8 }}>
                   <label htmlFor="searchText">Search</label>
@@ -654,7 +672,7 @@ export default function Landing98() {
                         <td>
                           <div className="field-row" style={{ gap: 4 }}>
                             <button onClick={() => { playClick(); setSelected(a); }}>Select</button>
-                            {me?.account_number === '0000' && (
+                            {isAdmin && (
                               <button
                                 onClick={() => deleteAccount(a.account_number)}
                                 disabled={a.account_number === '0000' || pending}
@@ -747,13 +765,13 @@ export default function Landing98() {
                             </td>
                             <td>
                               <div className="field-row" style={{ gap: 4 }}>
-                                {me?.account_number === '0000' && t.status === 'Pending' && (
+                                {isAdmin && t.status === 'Pending' && (
                                   <button onClick={() => completeTx(t.id)}>Complete</button>
                                 )}
-                                {me?.account_number === '0000' && t.status === 'Pending' && (
+                                {isAdmin && t.status === 'Pending' && (
                                   <button onClick={() => voidTx(t.id)}>Void</button>
                                 )}
-                                {me?.account_number === '0000' && t.status === 'Completed' && (
+                                {isAdmin && t.status === 'Completed' && (
                                   <>
                                     <button onClick={() => voidTx(t.id)}>Void</button>
                                     <button onClick={() => rollbackTx(t.id)}>Rollback</button>

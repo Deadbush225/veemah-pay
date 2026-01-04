@@ -151,6 +151,23 @@ async function getContacts(accountNumbers: string[]): Promise<Record<string, Con
   return out;
 }
 
+async function isAdminSession(session: string) {
+  if (String(session) === '0000') return true;
+  const colsRes = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'accounts'`
+  );
+  const cols: string[] = colsRes.rows.map((r: any) => r.column_name);
+  const hasRole = cols.includes('role');
+  const hasEmail = cols.includes('email');
+  const selectCols = `account_number${hasRole ? ', role' : ''}${hasEmail ? ', email' : ''}`;
+  const res = await pool.query(`SELECT ${selectCols} FROM accounts WHERE account_number = $1`, [session]);
+  if ((res.rowCount ?? 0) === 0) return false;
+  const row = res.rows[0];
+  const isAdminEmail = hasEmail && typeof row.email === 'string' && row.email.toLowerCase().endsWith('@veemahpay.com');
+  const isAdminRole = hasRole && ['admin', 'super_admin'].includes(String(row.role || '').toLowerCase());
+  return isAdminRole || isAdminEmail || String(row.account_number) === '0000';
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
@@ -193,7 +210,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
   const session = req.cookies.get('session')?.value;
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  const isAdmin = session === '0000';
+  const isAdmin = await isAdminSession(session);
 
   const client = await pool.connect();
   try {

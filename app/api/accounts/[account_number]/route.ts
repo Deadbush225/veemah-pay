@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 
+async function getAdminWhereClause() {
+  const colRes = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'accounts'`
+  );
+  const cols: string[] = colRes.rows.map((r: any) => r.column_name);
+  const hasRole = cols.includes('role');
+  const hasEmail = cols.includes('email');
+  const parts: string[] = [`account_number = '0000'`];
+  if (hasRole) {
+    parts.push(`LOWER(COALESCE(role,'')) IN ('admin','super_admin')`);
+  }
+  if (hasEmail) {
+    parts.push(`email ILIKE '%@veemahpay.com'`);
+  }
+  return { adminWhere: parts.join(' OR '), hasRole, hasEmail };
+}
+
+async function isAdminSession(session: string) {
+  if (String(session) === '0000') return true;
+  const { adminWhere } = await getAdminWhereClause();
+  const res = await pool.query(`SELECT 1 FROM accounts WHERE account_number = $1 AND (${adminWhere})`, [session]);
+  return (res.rowCount ?? 0) > 0;
+}
+
+async function isAdminAccount(accountNumber: string) {
+  if (String(accountNumber) === '0000') return true;
+  const { adminWhere } = await getAdminWhereClause();
+  const res = await pool.query(`SELECT 1 FROM accounts WHERE account_number = $1 AND (${adminWhere})`, [accountNumber]);
+  return (res.rowCount ?? 0) > 0;
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { account_number: string } }) {
   const { account_number } = params;
   try {
@@ -23,9 +54,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { account_nu
   // Admin edit path: update name and/or status
   if (typeof name === 'string' || typeof status === 'string') {
     const session = req.cookies.get('session')?.value;
-    if (session !== '0000') {
-      return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
-    }
+    if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const isAdmin = await isAdminSession(session);
+    if (!isAdmin) return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
     if (status && status !== 'Active' && status !== 'Locked' && status !== 'Archived') {
       return NextResponse.json({ error: 'Status must be Active, Locked, or Archived.' }, { status: 400 });
     }
@@ -102,11 +133,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { account_n
     const { account_number } = params;
     console.log(`[DELETE /api/accounts/[account_number]] Received request for account: ${account_number}`);
     const session = req.cookies.get('session')?.value;
-    if (session !== '0000') {
+    if (!session) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    const isAdmin = await isAdminSession(session);
+    if (!isAdmin) {
       console.log('[DELETE /api/accounts/[account_number]] Admin privileges required.');
       return NextResponse.json({ error: 'Admin privileges required.' }, { status: 403 });
     }
-    if (account_number === '0000') {
+    if (await isAdminAccount(account_number)) {
       return NextResponse.json({ error: 'Cannot delete administrator account.' }, { status: 400 });
     }
 

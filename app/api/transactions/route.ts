@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 
-type TxType = 'deposit' | 'withdraw' | 'transfer';
+type TxType = 'deposit'|'withdraw'|'transfer';
+
+async function isAdminSession(session: string) {
+  if (String(session) === '0000') return true;
+  const colRes = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'accounts'`
+  );
+  const cols: string[] = colRes.rows.map((r: any) => r.column_name);
+  const hasRole = cols.includes('role');
+  const hasEmail = cols.includes('email');
+  const selectCols = `account_number${hasRole ? ', role' : ''}${hasEmail ? ', email' : ''}`;
+  const res = await pool.query(`SELECT ${selectCols} FROM accounts WHERE account_number = $1`, [session]);
+  if ((res.rowCount ?? 0) === 0) return false;
+  const row = res.rows[0];
+  const isAdminEmail = hasEmail && typeof row.email === 'string' && row.email.toLowerCase().endsWith('@veemahpay.com');
+  const isAdminRole = hasRole && ['admin', 'super_admin'].includes(String(row.role || '').toLowerCase());
+  return isAdminRole || isAdminEmail || String(row.account_number) === '0000';
+}
 
 type Contact = { account_number: string; name?: string | null; email?: string | null };
 
@@ -128,6 +145,154 @@ function buildReceiptEmail(args: {
   return { html, text, receiptNo };
 }
 
+function escapeHtml(v: any) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function withPrintShell(html: string, args: { title: string; autoprint: boolean }) {
+  const head = `<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(args.title)}</title>
+    <style>
+      @media print {
+        body { padding: 0 !important; background: #fff !important; }
+      }
+    </style>
+    ${args.autoprint ? `<script>window.addEventListener('load', () => { try { window.print(); } catch {} });</script>` : ''}
+  </head>`;
+  if (html.includes('<html>')) return html.replace('<html>', `<html>${head}`);
+  if (html.includes('<html ')) return html.replace(/<html[^>]*>/, (m) => `${m}${head}`);
+  return `<!doctype html><html>${head}<body>${html}</body></html>`;
+}
+
+function buildStatementHtml(args: {
+  accountNumber: string;
+  accountName?: string | null;
+  periodLabel: string;
+  generatedAt: Date;
+  transactions: any[];
+  contacts: Record<string, Contact>;
+}) {
+  const title = `Statement · ${args.accountNumber}`;
+  const generated = args.generatedAt.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  let totalIn = 0;
+  let totalOut = 0;
+
+  const rows = args.transactions
+    .map((tx) => {
+      const type = String(tx.type ?? '').toLowerCase();
+      const status = String(tx.status ?? '');
+      const createdAt = tx.created_at ? new Date(tx.created_at) : null;
+      const dateStr = createdAt
+        ? createdAt.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '-';
+
+      let incoming = 0;
+      let outgoing = 0;
+      let counterparty = '';
+
+      const src = String(tx.account_number ?? '');
+      const trg = String(tx.target_account ?? '');
+      if (type === 'deposit' && src === args.accountNumber) {
+        incoming = Number(tx.amount ?? 0) || 0;
+      } else if (type === 'withdraw' && src === args.accountNumber) {
+        outgoing = Number(tx.amount ?? 0) || 0;
+      } else if (type === 'transfer') {
+        if (trg === args.accountNumber) {
+          incoming = Number(tx.amount ?? 0) || 0;
+          counterparty = src;
+        } else if (src === args.accountNumber) {
+          outgoing = Number(tx.amount ?? 0) || 0;
+          counterparty = trg;
+        }
+      }
+
+      totalIn += incoming;
+      totalOut += outgoing;
+
+      const cpName = counterparty ? args.contacts[counterparty]?.name : null;
+      const cpLabel = counterparty ? `${escapeHtml(counterparty)}${cpName ? ` · ${escapeHtml(cpName)}` : ''}` : '-';
+      const note = String(tx.note ?? '').trim();
+
+      return `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;">${escapeHtml(tx.id)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;text-transform:capitalize;">${escapeHtml(type || '-')}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;">${escapeHtml(status || '-')}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;">${escapeHtml(dateStr)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;">${cpLabel}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;text-align:right;">${incoming ? escapeHtml(formatMoney(incoming)) : ''}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;text-align:right;">${outgoing ? escapeHtml(formatMoney(outgoing)) : ''}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#0b1320;font-size:13px;">${escapeHtml(note)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const net = totalIn - totalOut;
+
+  const html = `<!doctype html>
+  <html>
+    <body style="margin:0;background:#f7f8fb;padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+      <div style="max-width:900px;margin:0 auto;background:#ffffff;border:1px solid #e5e8ef;border-radius:14px;overflow:hidden;">
+        <div style="padding:18px 22px;background:linear-gradient(135deg,#0a6bff,#39b6ff);color:#ffffff;">
+          <div style="font-size:16px;font-weight:800;letter-spacing:.2px;">VeemahPay</div>
+          <div style="margin-top:6px;font-size:20px;font-weight:800;">Statement</div>
+          <div style="margin-top:4px;font-size:13px;opacity:.9;">${escapeHtml(args.periodLabel)} · Generated ${escapeHtml(generated)}</div>
+        </div>
+        <div style="padding:18px 22px;">
+          <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="color:#0b1320;font-size:13px;">
+              <div style="font-weight:700;">Account</div>
+              <div>${escapeHtml(args.accountNumber)}${args.accountName ? ` · ${escapeHtml(args.accountName)}` : ''}</div>
+            </div>
+            <div style="color:#0b1320;font-size:13px;text-align:right;">
+              <div style="font-weight:700;">Totals</div>
+              <div>In: ${escapeHtml(formatMoney(totalIn))} · Out: ${escapeHtml(formatMoney(totalOut))} · Net: ${escapeHtml(formatMoney(net))}</div>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #eef1f6;border-radius:12px;overflow:hidden;">
+            <thead>
+              <tr style="background:#f3f5f9;">
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">ID</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Type</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Status</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Date</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Counterparty</th>
+                <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">In</th>
+                <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Out</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #e6e8ee;color:#5b667a;font-size:12px;">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="8" style="padding:12px;color:#5b667a;font-size:13px;">No transactions found for this period.</td></tr>`}
+            </tbody>
+          </table>
+          <div style="margin-top:14px;color:#5b667a;font-size:12px;line-height:1.5;">
+            This statement is provided for your records. Use your browser print dialog to save as PDF.
+          </div>
+        </div>
+        <div style="padding:14px 22px;border-top:1px solid #e5e8ef;color:#5b667a;font-size:12px;">
+          This is an automated document. Please do not reply.
+        </div>
+      </div>
+    </body>
+  </html>`;
+
+  return { html, title };
+}
+
 async function getContacts(client: any, accountNumbers: string[]): Promise<Record<string, Contact>> {
   const out: Record<string, Contact> = {};
   const uniq = Array.from(new Set(accountNumbers.filter(Boolean)));
@@ -157,13 +322,35 @@ export async function GET(req: NextRequest) {
     const account = url.searchParams.get('account');
     const type = url.searchParams.get('type');
     const status = url.searchParams.get('status');
+    const month = url.searchParams.get('month');
+    const idParam = url.searchParams.get('id');
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     const q = url.searchParams.get('q');
-    const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 500);
+    const minAmountParam = url.searchParams.get('min_amount');
+    const maxAmountParam = url.searchParams.get('max_amount');
+    const direction = url.searchParams.get('direction');
+    const format = String(url.searchParams.get('format') ?? '').toLowerCase();
+    const autoprint = url.searchParams.get('autoprint') === '1';
+    const rawLimit = Number(url.searchParams.get('limit') ?? 100);
+    const limitCap = format === 'csv' ? 5000 : format === 'statement' ? 20000 : 500;
+    const limit = Math.min(rawLimit || 100, limitCap);
     const cursorParam = url.searchParams.get('cursor');
     const cursorIdParam = url.searchParams.get('cursor_id');
     const cursorTsParam = url.searchParams.get('cursor_created_at');
+
+    const session = req.cookies.get('session')?.value;
+    if (!session) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    const isAdmin = await isAdminSession(session);
+    if (account) {
+      if (!isAdmin && String(account) !== String(session)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Introspect available columns to gracefully support older schemas
     const colsRes = await pool.query(
@@ -194,6 +381,60 @@ export async function GET(req: NextRequest) {
     selectFields.push(has('target_balance_before') ? 'target_balance_before::float AS target_balance_before' : 'NULL::float AS target_balance_before');
     selectFields.push(has('target_balance_after') ? 'target_balance_after::float AS target_balance_after' : 'NULL::float AS target_balance_after');
 
+    if (format === 'receipt') {
+      const id = Number(idParam);
+      if (!Number.isFinite(id) || id <= 0) {
+        return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+      }
+
+      const whereReceipt: string[] = [`id = $1`];
+      const paramsReceipt: any[] = [id];
+      let idxR = 2;
+      if (!isAdmin || account) {
+        if (!account) {
+          return NextResponse.json({ error: 'Account is required' }, { status: 400 });
+        }
+        if (has('target_account')) {
+          whereReceipt.push(`(account_number = $${idxR} OR target_account = $${idxR})`);
+        } else {
+          whereReceipt.push(`account_number = $${idxR}`);
+        }
+        paramsReceipt.push(account);
+        idxR++;
+      }
+      const sqlReceipt = `SELECT ${selectFields.join(', ')} FROM transactions WHERE ${whereReceipt.join(' AND ')} LIMIT 1`;
+      const receiptRes = await pool.query(sqlReceipt, paramsReceipt);
+      if (receiptRes.rowCount === 0) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+      const tx = receiptRes.rows[0];
+      const occurredAt = tx.created_at ? new Date(tx.created_at) : new Date();
+      const email = buildReceiptEmail({
+        title: 'Transaction Receipt',
+        subtitle: 'Use your browser print dialog to save as PDF.',
+        transactionId: tx.id,
+        status: String(tx.status ?? ''),
+        type: String(tx.type ?? ''),
+        amount: Number(tx.amount ?? 0) || 0,
+        occurredAt,
+        fromAccount: tx.account_number ? String(tx.account_number) : null,
+        toAccount: tx.target_account ? String(tx.target_account) : null,
+        note: tx.note ? String(tx.note) : null,
+        sourceBalanceBefore: tx.source_balance_before ?? null,
+        sourceBalanceAfter: tx.source_balance_after ?? null,
+        targetBalanceBefore: tx.target_balance_before ?? null,
+        targetBalanceAfter: tx.target_balance_after ?? null,
+      });
+      const printable = withPrintShell(email.html, { title: `Receipt ${email.receiptNo}`, autoprint });
+      return new NextResponse(printable, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     const where: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -206,6 +447,18 @@ export async function GET(req: NextRequest) {
       params.push(account);
       idx++;
     }
+    if (direction && account && has('target_account') && has('type')) {
+      const d = String(direction).toLowerCase();
+      if (d === 'in') {
+        where.push(`((type = 'deposit' AND account_number = $${idx}) OR (type = 'transfer' AND target_account = $${idx}))`);
+        params.push(account);
+        idx++;
+      } else if (d === 'out') {
+        where.push(`((type = 'withdraw' AND account_number = $${idx}) OR (type = 'transfer' AND account_number = $${idx} AND (target_account IS NULL OR target_account <> $${idx})))`);
+        params.push(account);
+        idx++;
+      }
+    }
     if (type && has('type')) {
       where.push(`type = $${idx}`);
       params.push(type);
@@ -214,6 +467,26 @@ export async function GET(req: NextRequest) {
     if (status && has('status')) {
       where.push(`status = $${idx}`);
       params.push(status);
+      idx++;
+    }
+    if (month && has('created_at')) {
+      const m = String(month).trim();
+      const match = /^(\d{4})-(\d{2})$/.exec(m);
+      if (!match) {
+        return NextResponse.json({ error: 'Invalid month format (YYYY-MM)' }, { status: 400 });
+      }
+      const year = Number(match[1]);
+      const mon = Number(match[2]);
+      if (!Number.isFinite(year) || !Number.isFinite(mon) || mon < 1 || mon > 12) {
+        return NextResponse.json({ error: 'Invalid month' }, { status: 400 });
+      }
+      const start = new Date(Date.UTC(year, mon - 1, 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(year, mon, 1, 0, 0, 0, 0));
+      where.push(`created_at >= $${idx}`);
+      params.push(start);
+      idx++;
+      where.push(`created_at < $${idx}`);
+      params.push(end);
       idx++;
     }
     if (from && has('created_at')) {
@@ -226,10 +499,55 @@ export async function GET(req: NextRequest) {
       params.push(new Date(to));
       idx++;
     }
-    if (q && has('note')) {
-      where.push(`(note ILIKE $${idx})`);
-      params.push(`%${q}%`);
+    const minAmount = minAmountParam != null && minAmountParam !== '' ? Number(minAmountParam) : null;
+    const maxAmount = maxAmountParam != null && maxAmountParam !== '' ? Number(maxAmountParam) : null;
+    if (minAmount != null && Number.isFinite(minAmount) && has('amount')) {
+      where.push(`amount >= $${idx}`);
+      params.push(minAmount);
       idx++;
+    }
+    if (maxAmount != null && Number.isFinite(maxAmount) && has('amount')) {
+      where.push(`amount <= $${idx}`);
+      params.push(maxAmount);
+      idx++;
+    }
+
+    if (q) {
+      const qq = String(q).trim();
+      if (qq) {
+        const ors: string[] = [];
+        const like = `%${qq}%`;
+        const qNum = Number(qq);
+        if (Number.isFinite(qNum)) {
+          ors.push(`id = $${idx}`);
+          params.push(qNum);
+          idx++;
+          if (has('amount')) {
+            ors.push(`amount::float = $${idx}`);
+            params.push(qNum);
+            idx++;
+          }
+        }
+        ors.push(`account_number ILIKE $${idx}`);
+        params.push(like);
+        idx++;
+        if (has('target_account')) {
+          ors.push(`target_account ILIKE $${idx}`);
+          params.push(like);
+          idx++;
+        }
+        if (has('created_by')) {
+          ors.push(`created_by ILIKE $${idx}`);
+          params.push(like);
+          idx++;
+        }
+        if (has('note')) {
+          ors.push(`note ILIKE $${idx}`);
+          params.push(like);
+          idx++;
+        }
+        if (ors.length) where.push(`(${ors.join(' OR ')})`);
+      }
     }
 
     const hasCreatedAt = has('created_at');
@@ -272,6 +590,125 @@ export async function GET(req: NextRequest) {
     const sql = `SELECT ${selectFields.join(', ')} FROM transactions ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order} LIMIT ${limit}`;
     const res = await pool.query(sql, params);
 
+    if (format === 'statement') {
+      if (!account) {
+        return NextResponse.json({ error: 'Account is required' }, { status: 400 });
+      }
+      const accNum = String(account);
+      const counterpartyNumbers: string[] = [];
+      for (const row of res.rows) {
+        const t = String(row.type ?? '').toLowerCase();
+        if (t === 'transfer') {
+          if (String(row.account_number ?? '') === accNum && row.target_account) counterpartyNumbers.push(String(row.target_account));
+          if (String(row.target_account ?? '') === accNum && row.account_number) counterpartyNumbers.push(String(row.account_number));
+        }
+      }
+      const contacts = await getContacts(pool, [accNum, ...counterpartyNumbers]);
+      const periodLabel = month ? `Month ${String(month)}` : from || to ? `Period ${from ? String(from) : ''}${from && to ? ' – ' : ''}${to ? String(to) : ''}` : 'All time';
+      const doc = buildStatementHtml({
+        accountNumber: accNum,
+        accountName: contacts[accNum]?.name ?? null,
+        periodLabel,
+        generatedAt: new Date(),
+        transactions: res.rows,
+        contacts,
+      });
+      const printable = withPrintShell(doc.html, { title: doc.title, autoprint });
+      return new NextResponse(printable, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    if (format === 'csv') {
+      const csvEscape = (v: any) => {
+        const s = String(v ?? '');
+        if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const header = [
+        'id',
+        'type',
+        'status',
+        'amount',
+        'fee',
+        'direction',
+        'counterparty',
+        'account_number',
+        'target_account',
+        'note',
+        'created_at',
+        'completed_at',
+        'voided_at',
+        'created_by',
+        'source_balance_before',
+        'source_balance_after',
+        'target_balance_before',
+        'target_balance_after',
+      ];
+      const lines: string[] = [];
+      lines.push(header.join(','));
+      for (const row of res.rows) {
+        let dir = '';
+        let counterparty = '';
+        if (account) {
+          const acc = String(account);
+          const src = String(row.account_number ?? '');
+          const trg = String(row.target_account ?? '');
+          const t = String(row.type ?? '').toLowerCase();
+          if (t === 'deposit' && src === acc) {
+            dir = 'IN';
+          } else if (t === 'withdraw' && src === acc) {
+            dir = 'OUT';
+          } else if (t === 'transfer') {
+            if (trg === acc) {
+              dir = 'IN';
+              counterparty = src;
+            } else if (src === acc) {
+              dir = 'OUT';
+              counterparty = trg;
+            }
+          }
+        }
+
+        const values = [
+          row.id,
+          row.type,
+          row.status,
+          row.amount,
+          row.fee,
+          dir,
+          counterparty,
+          row.account_number,
+          row.target_account,
+          row.note,
+          row.created_at ? new Date(row.created_at).toISOString() : '',
+          row.completed_at ? new Date(row.completed_at).toISOString() : '',
+          row.voided_at ? new Date(row.voided_at).toISOString() : '',
+          row.created_by,
+          row.source_balance_before,
+          row.source_balance_after,
+          row.target_balance_before,
+          row.target_balance_after,
+        ];
+        lines.push(values.map(csvEscape).join(','));
+      }
+
+      const fileBase = account ? `veemahpay-transactions-${account}` : 'veemahpay-transactions';
+      const csv = lines.join('\n');
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${fileBase}.csv"`,
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     let next_cursor: string | null = null;
     if (res.rows.length === limit) {
       const last = res.rows[res.rows.length - 1];
@@ -313,7 +750,7 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
-    const isAdmin = session === '0000';
+    const isAdmin = await isAdminSession(session);
     if (!isAdmin && session !== source_account) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -467,6 +904,44 @@ export async function GET(req: NextRequest) {
     }
 
     await client.query('COMMIT');
+
+    try {
+      const notifExists = await client.query(`SELECT to_regclass('public.notifications') AS r`);
+      const hasNotif = !!notifExists.rows?.[0]?.r;
+      if (hasNotif) {
+        const baseMeta = {
+          transaction_id: tx?.id ?? null,
+          type: tx?.type ?? t,
+          status: tx?.status ?? status,
+          amount: amt,
+          note: note ?? null,
+        };
+        await client.query(
+          `INSERT INTO public.notifications (type, title, body, status, recipient_account_number, sender_account_number, metadata)
+           VALUES ('TRANSACTION', 'Transaction Update', $1, 'UNREAD', $2, $3, $4::jsonb)`,
+          [
+            `Your ${String(t).toLowerCase()} has been ${pending ? 'created' : 'completed'}.`,
+            source_account,
+            session ?? null,
+            JSON.stringify({ ...baseMeta, role: 'source' }),
+          ]
+        );
+        if (t === 'transfer' && target_account && target_account !== source_account) {
+          await client.query(
+            `INSERT INTO public.notifications (type, title, body, status, recipient_account_number, sender_account_number, metadata)
+             VALUES ('TRANSACTION', 'Transfer Received', $1, 'UNREAD', $2, $3, $4::jsonb)`,
+            [
+              'You received a transfer.',
+              target_account,
+              session ?? null,
+              JSON.stringify({ ...baseMeta, role: 'target' }),
+            ]
+          );
+        }
+      }
+    } catch (e) {
+      console.error('Notification insert error:', e);
+    }
 
     try {
       if (status === 'Completed' && tx?.id) {

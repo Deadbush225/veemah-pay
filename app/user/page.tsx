@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
 import { SpendingGraph } from '@/components/dashboard/SpendingGraph';
@@ -8,7 +8,7 @@ import { QRModal } from '@/components/ui/QRModal';
 import { MoneyDisplay, PositiveMoney } from '@/components/ui/MoneyDisplay';
 
 type Account = { account_number: string; name: string; balance: number; status: string };
-type Transaction = { id: number; type: string; status: string; amount: number; target_account?: string | null; note?: string | null; created_at?: string };
+type Transaction = { id: number; type: string; status: string; amount: number; account_number?: string; target_account?: string | null; note?: string | null; created_at?: string };
 
 
 export default function UserPage() {
@@ -37,7 +37,7 @@ export default function UserPage() {
     }
   };
 
-  const fetchMe = async () => {
+  const fetchMe = useCallback(async () => {
     try {
       const res = await fetch("/api/me");
       const data: any = await readJson(res);
@@ -46,7 +46,7 @@ export default function UserPage() {
         return;
       }
       if (data?.authenticated) {
-        if (data.account?.account_number === "0000") { router.replace("/admin"); return; }
+        if (!!data?.isAdmin) { router.replace("/admin"); return; }
         setMe(data.account);
         return;
       }
@@ -54,9 +54,9 @@ export default function UserPage() {
     } catch (e: any) {
       setError(e?.message || t('user.operation_failed'));
     }
-  };
+  }, [router, t]);
 
-  const fetchTransactions = async (acc: string) => {
+  const fetchTransactions = useCallback(async (acc: string) => {
     try {
       setRefreshing(true);
       const res = await fetch(`/api/transactions?account=${encodeURIComponent(acc)}&limit=50`);
@@ -72,9 +72,9 @@ export default function UserPage() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [t]);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     if (!me) return;
     setRefreshing(true);
     try {
@@ -85,19 +85,15 @@ export default function UserPage() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [fetchMe, fetchTransactions, me, t]);
 
   useEffect(() => {
-    fetchMe().then(() => {
-      // Need to re-fetch me to get the account number if it wasn't set yet, 
-      // but simpler is to let the second useEffect handle it.
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    fetchMe().catch(() => undefined);
+  }, [fetchMe]);
 
   useEffect(() => {
     if (me) fetchTransactions(me.account_number);
-  }, [me]);
+  }, [fetchTransactions, me]);
 
   const doOp = async (type: "deposit" | "withdraw") => {
     if (!me) return;
@@ -105,7 +101,6 @@ export default function UserPage() {
     const amt = Number(type === "deposit" ? depAmount : wdAmount);
     if (!amt || amt <= 0) { setError(t('user.enter_valid_amount')); return; }
     
-    // Require PIN for withdraw
     if (type === "withdraw" && !wdPin) { setError(t('user.enter_pin')); return; }
 
     setPending(true);
@@ -163,7 +158,6 @@ export default function UserPage() {
 
       if (!opOk) return;
 
-      // Auto-refresh data after successful operation
       try {
         await refreshData();
       } catch (e: any) {
@@ -244,7 +238,6 @@ export default function UserPage() {
 
       if (!opOk) return;
 
-      // Auto-refresh data after successful transfer
       try {
         await refreshData();
       } catch (e: any) {
@@ -377,14 +370,14 @@ export default function UserPage() {
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3>{t('dash.recent_tx')}</h3>
-              <button 
-                className="btn ghost" 
-                onClick={refreshData}
-                disabled={refreshing}
-                style={{ padding: '8px 12px', fontSize: '14px' }}
-              >
-                {refreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
-              </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button className="btn ghost" onClick={() => router.push("/transactions")} style={{ padding: "8px 12px", fontSize: "14px" }}>
+                  {t("nav.transactions")}
+                </button>
+                <button className="btn ghost" onClick={refreshData} disabled={refreshing} style={{ padding: '8px 12px', fontSize: '14px' }}>
+                  {refreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+                </button>
+              </div>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table className="table zebra">
@@ -399,10 +392,7 @@ export default function UserPage() {
                 </thead>
                 <tbody>
                   {transactions.map(t => {
-                    // Determine if this is incoming or outgoing money for the user
                     const isIncoming = t.target_account === me?.account_number || t.type === 'deposit';
-                    const isOutgoing = (t.type === 'withdraw' || t.type === 'transfer') && !isIncoming;
-                    
                     return (
                       <tr key={t.id}>
                         <td>{t.id}</td>
