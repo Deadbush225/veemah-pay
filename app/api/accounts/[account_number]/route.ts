@@ -178,13 +178,48 @@ export async function PATCH(req: NextRequest, { params }: { params: { account_nu
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ op, amount }),
     });
-    const data = await upstream.json().catch(() => null);
-    if (!upstream.ok) {
-      return NextResponse.json(data ?? { error: 'Upstream error' }, { status: upstream.status });
+    if (upstream.ok) {
+      const data = await upstream.json().catch(() => null);
+      return NextResponse.json({ account: data });
     }
-    return NextResponse.json({ account: data });
+    console.warn(`[PATCH /api/accounts] Java server returned ${upstream.status}, falling back to local DB.`);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? 'Server error' }, { status: 500 });
+    console.warn('[PATCH /api/accounts] Java server unreachable, falling back to local DB:', err);
+  }
+
+  const session = req.cookies.get('session')?.value;
+  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const isAdmin = await isAdminSession(session);
+  if (!isAdmin && session !== account_number) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query('SELECT balance FROM accounts WHERE account_number = $1 FOR UPDATE', [account_number]);
+    if (res.rowCount === 0) throw new Error('Account not found');
+    const currentBalance = parseFloat(res.rows[0].balance);
+    
+    let newBalance = currentBalance;
+    if (op === 'deposit') {
+        newBalance += amount;
+    } else {
+        if (currentBalance < amount) throw new Error('Insufficient funds');
+        newBalance -= amount;
+    }
+    
+    const updateRes = await client.query(
+        'UPDATE accounts SET balance = $1 WHERE account_number = $2 RETURNING account_number, name, balance::float AS balance, status',
+        [newBalance, account_number]
+    );
+    await client.query('COMMIT');
+    return NextResponse.json({ account: updateRes.rows[0] });
+  } catch (e: any) {
+    await client.query('ROLLBACK');
+    return NextResponse.json({ error: e.message ?? 'Server error' }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
 
