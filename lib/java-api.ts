@@ -98,26 +98,64 @@ export interface ApiErrorResponse {
 	timestamp: string;
 }
 
+// Health check cache to avoid repeated expensive calls
+let healthCheckCache: { 
+	isHealthy: boolean; 
+	timestamp: number; 
+	promise?: Promise<boolean>;
+} | null = null;
+const HEALTH_CHECK_CACHE_DURATION = 30000; // 30 seconds
+const HEALTH_CHECK_TIMEOUT = 3000; // 3 seconds timeout for health checks
+
+// Startup connection mode - once determined, stick with it for the session
+let connectionMode: 'java' | 'nextjs' | 'unknown' = 'unknown';
+let startupCheckComplete = false;
+
 /**
- * Check if Java server is healthy before making API calls
+ * Perform startup health check to determine which server to use for the entire session
+ */
+async function performStartupHealthCheck(): Promise<'java' | 'nextjs'> {
+	if (startupCheckComplete) {
+		return connectionMode as 'java' | 'nextjs';
+	}
+
+	console.log("🚀 Performing one-time startup health check...");
+
+	// In production without proper environment variables, use Next.js
+	if (config.isProduction && !JAVA_API_BASE) {
+		console.log("🔄 Production mode without Java API URL configured, using Next.js API");
+		connectionMode = 'nextjs';
+		startupCheckComplete = true;
+		return 'nextjs';
+	}
+
+	if (!JAVA_API_BASE) {
+		console.log("� No Java API URL configured, using Next.js API");
+		connectionMode = 'nextjs';
+		startupCheckComplete = true;
+		return 'nextjs';
+	}
+
+	try {
+		await performHealthCheck();
+		console.log("✅ Java server is healthy - using Java API for this session");
+		connectionMode = 'java';
+		startupCheckComplete = true;
+		return 'java';
+	} catch (error) {
+		console.warn("⚠️ Java server health check failed - using Next.js API for this session:", error);
+		connectionMode = 'nextjs';
+		startupCheckComplete = true;
+		return 'nextjs';
+	}
+}
+
+/**
+ * Check if Java server is healthy before making API calls (now just returns startup result)
  */
 async function checkJavaServerHealth(): Promise<boolean> {
-	try {
-		// In production without proper environment variables, skip Java server
-		if (config.isProduction && !JAVA_API_BASE) {
-			console.log("🔄 Production mode without Java API URL configured, using Next.js API fallback");
-			return false;
-		}
-		
-		await checkServerHealth();
-		return true;
-	} catch (error) {
-		console.warn(
-			"🔄 Java server health check failed, will use fallback:",
-			error
-		);
-		return false;
-	}
+	const mode = await performStartupHealthCheck();
+	return mode === 'java';
 }
 
 /**
@@ -566,6 +604,56 @@ export const config = {
 	// will check Java server health first and fall back to Next.js API if needed
 	autoFallback: true,
 
+	// Performance settings
+	healthCheckTimeout: HEALTH_CHECK_TIMEOUT,
+	healthCheckCacheDuration: HEALTH_CHECK_CACHE_DURATION,
+	requestTimeout: 8000,
+
+	// Get current connection mode
+	getConnectionMode() {
+		return {
+			mode: connectionMode,
+			startupComplete: startupCheckComplete,
+			description: connectionMode === 'java' ? 'Using Java server for all transactions' :
+						connectionMode === 'nextjs' ? 'Using Next.js API for all transactions' :
+						'Connection mode not yet determined'
+		};
+	},
+
+	// Reset startup check (for testing or if you want to recheck)
+	resetStartupCheck() {
+		connectionMode = 'unknown';
+		startupCheckComplete = false;
+		healthCheckCache = null;
+		console.log("🔄 Startup check reset - next API call will redetermine connection mode");
+	},
+
+	// Force use of Next.js API (bypass startup check)
+	forceNextJSMode() {
+		connectionMode = 'nextjs';
+		startupCheckComplete = true;
+		console.log("🔧 Forced to use Next.js API mode");
+	},
+
+	// Force use of Java API (bypass startup check)
+	forceJavaMode() {
+		connectionMode = 'java';
+		startupCheckComplete = true;
+		console.log("🔧 Forced to use Java API mode");
+	},
+
+	// Clear health check cache (legacy - kept for compatibility)
+	clearHealthCache() {
+		healthCheckCache = null;
+		console.log("🧹 Health check cache cleared");
+	},
+
+	// Force health check (legacy - now just resets startup check)
+	async forceHealthCheck() {
+		this.resetStartupCheck();
+		return await checkJavaServerHealth();
+	},
+
 	// Log configuration for debugging
 	logConfig() {
 		const shouldAddNgrokHeader = JAVA_API_BASE && (
@@ -576,12 +664,23 @@ export const config = {
 			!JAVA_API_BASE.startsWith("http://localhost")
 		);
 		
+		const connMode = this.getConnectionMode();
+		
 		console.log("🔧 Java API Configuration:", {
 			apiBase: this.apiBase,
 			isProduction: this.isProduction,
 			useJavaServer: this.useJavaServer,
 			autoFallback: this.autoFallback,
 			shouldAddNgrokHeader,
+			connectionMode: connMode,
+			performance: {
+				healthCheckTimeout: this.healthCheckTimeout + "ms",
+				healthCheckCacheDuration: this.healthCheckCacheDuration + "ms", 
+				requestTimeout: this.requestTimeout + "ms",
+				cacheStatus: healthCheckCache ? 
+					`Cached (${Math.round((Date.now() - healthCheckCache.timestamp) / 1000)}s ago, healthy: ${healthCheckCache.isHealthy})` : 
+					"No cache"
+			},
 			ngrokDetection: {
 				containsNgrok: this.apiBase?.includes("ngrok"),
 				containsTunnel: this.apiBase?.includes("tunnel"), 
