@@ -84,6 +84,26 @@ else
     exit 1
 fi
 
+# Start ngrok tunnel in the background
+green "Starting ngrok tunnel..."
+# Start ngrok in background (with checks & logging)
+NGROK_HOST="sasha-nonreliable-thunderingly.ngrok-free.dev"
+NGROK_PORT=8081
+NGROK_LOG="${SERVER_DIR}/ngrok.log"
+
+yellow "Starting ngrok tunnel to ${NGROK_HOST}:${NGROK_PORT}..."
+nohup ngrok http --domain="$NGROK_HOST" "$NGROK_PORT" >"$NGROK_LOG" 2>&1 &
+NGROK_PID=$!
+sleep 2
+if kill -0 "$NGROK_PID" 2>/dev/null; then
+  green "ngrok started (PID: $NGROK_PID). Logs: $NGROK_LOG"
+else
+  red "Failed to start ngrok. Check $NGROK_LOG"
+  NGROK_PID=""
+fi
+
+sleep 2  # Give ngrok time to start
+
 # Start server
 green "Starting VeemahPay Transaction Server in GUI mode...\n"
 
