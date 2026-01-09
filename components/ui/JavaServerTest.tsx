@@ -7,6 +7,7 @@ export function JavaServerTest() {
   const [health, setHealth] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const apiBaseSafe = config.apiBase ?? '';
 
   const testConnection = async () => {
     setLoading(true);
@@ -65,7 +66,7 @@ export function JavaServerTest() {
       <h3>🔧 Java Server Connection Test</h3>
       
       <div style={{ marginBottom: '10px' }}>
-        <strong>API Base URL:</strong> {config.apiBase}
+        <strong>API Base URL:</strong> {config.apiBase ?? '(not set)'}
       </div>
       
       <button 
@@ -136,10 +137,10 @@ export function JavaServerTest() {
 - NODE_ENV: ${process.env.NODE_ENV}
 
 Configuration:
-- API Base: ${config.apiBase}
+- API Base: ${config.apiBase ?? '(not set)'}
 - Use Java Server: ${config.useJavaServer}
 - Is Production: ${config.isProduction}
-- Has ngrok Header: ${config.apiBase.includes('ngrok') || config.apiBase.includes('tunnel')}`}
+- Has ngrok Header: ${apiBaseSafe.includes('ngrok') || apiBaseSafe.includes('tunnel')}`}
         </pre>
       </details>
     </div>
