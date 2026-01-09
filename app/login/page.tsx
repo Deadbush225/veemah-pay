@@ -147,11 +147,11 @@ export default function LoginPage() {
                 </button>
                 
                 <div style={{ textAlign: 'center', marginTop: 16 }}>
-                  <Link href="/forgot-password" style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: 500 }}>Forgot your password?</Link>
+                  <Link href="/forgot-password" style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: 500 }}>{t('login.forgot_your_password')}</Link>
                 </div>
 
                 <div style={{ textAlign: 'center', marginTop: 8, color: 'var(--muted)', fontSize: '14px' }}>
-                  Don't have an account? <Link href="/signup" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign up</Link>
+                  {t('login.dont_have_account')} <Link href="/signup" style={{ color: 'var(--primary)', fontWeight: 600 }}>{t('login.sign_up_link')}</Link>
                 </div>
               </div>
             </div>

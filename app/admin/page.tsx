@@ -157,6 +157,7 @@ export default function AdminPage() {
             <input placeholder={t('admin.search_placeholder')} value={search} onChange={e => setSearch(e.target.value)} />
             <button className="btn" onClick={fetchAccounts}>{t('admin.search')}</button>
             <button className="btn" onClick={fetchAccounts}>{t('admin.refresh')}</button>
+            <button className="btn" onClick={() => router.push('/admin/archived')}>Archived Accounts</button>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="table zebra">
@@ -174,7 +175,7 @@ export default function AdminPage() {
                   <tr key={a.account_number} className={selected?.account_number === a.account_number ? "selected" : ""} onClick={() => setSelected(a)}>
                     <td>{a.account_number}</td>
                     <td>{a.name}</td>
-                    {hasRole && <td>{typeof a.role === "string" ? a.role : ""}</td>}
+                    {hasRole && <td>{typeof a.role === "string" ? a.role.charAt(0).toUpperCase() + a.role.slice(1) : ""}</td>}
                     <td>{a.status}</td>
                     <td className="num">₱{Number(a.balance).toFixed(2)}</td>
                   </tr>
@@ -191,7 +192,6 @@ export default function AdminPage() {
                   <select value={editRole} onChange={e => setEditRole(e.target.value)}>
                     <option value="user">{t('admin.role_user')}</option>
                     <option value="admin">{t('admin.role_admin')}</option>
-                    <option value="super_admin">{t('admin.role_super_admin')}</option>
                   </select>
                 )}
                 <select value={editStatus} onChange={e => setEditStatus(e.target.value as Account["status"]) }>

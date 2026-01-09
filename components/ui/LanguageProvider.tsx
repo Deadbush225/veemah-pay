@@ -43,7 +43,10 @@ const translations: Translations = {
   'login.submit': { en: 'Login', tl: 'Pumasok' },
   'login.logging_in': { en: 'Logging in...', tl: 'Pumapasok...' },
   'login.forgot_password': { en: 'Forgot Password?', tl: 'Nakalimutan ang Password?' },
+  'login.forgot_your_password': { en: 'Forgot your password?', tl: 'Nakalimutan ang iyong password?' },
   'login.sign_in_btn': { en: 'Sign In', tl: 'Mag-sign In' },
+  'login.dont_have_account': { en: "Don't have an account?", tl: 'Wala pang account?' },
+  'login.sign_up_link': { en: 'Sign up', tl: 'Mag-sign up' },
   'login.signing_in': { en: 'Signing in...', tl: 'Nag-sa-sign in...' },
 
   // Signup
@@ -76,7 +79,6 @@ const translations: Translations = {
   'admin.role': { en: 'Role', tl: 'Tungkulin' },
   'admin.role_user': { en: 'User', tl: 'User' },
   'admin.role_admin': { en: 'Admin', tl: 'Admin' },
-  'admin.role_super_admin': { en: 'Super Admin', tl: 'Super Admin' },
   'admin.status': { en: 'Status', tl: 'Katayuan' },
   'admin.balance': { en: 'Balance', tl: 'Balanse' },
   'admin.edit_info': { en: 'Edit Info', tl: 'I-edit ang Impormasyon' },

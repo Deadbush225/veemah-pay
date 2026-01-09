@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
 import { SpendingGraph } from '@/components/dashboard/SpendingGraph';
 import { useLanguage } from '@/components/ui/LanguageProvider';
+import { useAuth } from '@/components/ui/AuthProvider';
 import { QRModal } from '@/components/ui/QRModal';
 import { MoneyDisplay, PositiveMoney } from '@/components/ui/MoneyDisplay';
 import { useToast } from "@/components/ui/Toast";
@@ -16,8 +17,9 @@ type Transaction = { id: number; type: string; status: string; amount: number; a
 export default function UserPage() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { me: authMe, setMe: setAuthMe } = useAuth();
+  const me = authMe?.account ? (authMe.account as unknown as Account) : null;
   const toast = useToast();
-  const [me, setMe] = useState<Account | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [depAmount, setDepAmount] = useState("");
@@ -73,7 +75,7 @@ export default function UserPage() {
       }
       if (data?.authenticated) {
         if (!!data?.isAdmin) { router.replace("/admin"); return null; }
-        setMe(data.account);
+        setAuthMe(data);
         return data.account as Account;
       }
       router.replace("/login");
@@ -205,7 +207,7 @@ export default function UserPage() {
           try {
             const tx: any = result.transaction;
             if (tx && typeof tx.source_balance_after !== 'undefined') {
-              setMe((prev) => prev ? { ...prev, balance: Number(tx.source_balance_after) } : prev);
+              setAuthMe((prev) => prev && prev.account ? { ...prev, account: { ...prev.account, balance: Number(tx.source_balance_after) } } : prev);
             }
           } catch {}
         } else {
@@ -283,7 +285,7 @@ export default function UserPage() {
           try {
             const tx: any = result.transaction;
             if (tx && typeof tx.source_balance_after !== 'undefined') {
-              setMe((prev) => prev ? { ...prev, balance: Number(tx.source_balance_after) } : prev);
+              setAuthMe((prev) => prev && prev.account ? { ...prev, account: { ...prev.account, balance: Number(tx.source_balance_after) } } : prev);
             }
           } catch {}
         } else {
@@ -523,7 +525,7 @@ export default function UserPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map(t => {
+                  {transactions.slice(0, 10).map(t => {
                     const isIncoming = t.target_account === me?.account_number || t.type === 'deposit';
                     return (
                       <tr key={t.id}>

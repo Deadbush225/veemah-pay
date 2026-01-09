@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Line
+  Line,
 } from 'recharts';
 import { useLanguage } from '@/components/ui/LanguageProvider';
 import { MoneyDisplay } from '@/components/ui/MoneyDisplay';
@@ -122,11 +122,11 @@ function movingAverage(values: number[], windowSize: number) {
 export function SpendingGraph({ transactions }: Props) {
   const { t } = useLanguage();
   const [selectedRange, setSelectedRange] = useState<TimeRange>('30d');
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const el = document.documentElement;
-    const readTheme = () => (el.getAttribute("data-theme") === "dark" ? "dark" : "light");
+    const readTheme = () => (el.getAttribute("data-theme") === "light" ? "light" : "dark");
     setTheme(readTheme());
     const obs = new MutationObserver(() => setTheme(readTheme()));
     obs.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
@@ -146,11 +146,13 @@ export function SpendingGraph({ transactions }: Props) {
   const tooltipText = isDark ? "#fff" : "var(--text)";
   const tooltipShadow = isDark ? "0 8px 32px rgba(0,0,0,0.4)" : "0 10px 28px rgba(15,22,40,0.18)";
   const tooltipLabelColor = isDark ? "rgba(255,255,255,0.72)" : "var(--muted)";
+  const axisStroke = isDark ? "rgba(255,255,255,0.8)" : "var(--muted)";
   const categoryThisFill = isDark ? "rgba(255, 0, 85, 0.75)" : "rgba(216, 27, 96, 0.78)";
   const categoryPrevFill = isDark ? "rgba(255, 0, 85, 0.25)" : "rgba(216, 27, 96, 0.38)";
   const categoryPrevStroke = isDark ? "rgba(255, 0, 85, 0.55)" : "rgba(216, 27, 96, 0.62)";
   const monthIncomeFill = isDark ? "rgba(0, 242, 255, 0.55)" : "rgba(10, 162, 192, 0.75)";
   const monthExpenseFill = isDark ? "rgba(255, 0, 85, 0.55)" : "rgba(216, 27, 96, 0.75)";
+  
 
   const rangeLabel =
     selectedRange === '7d'
@@ -197,6 +199,7 @@ export function SpendingGraph({ transactions }: Props) {
     let hasAnyInRange = false;
     let periodIncome = 0;
     let periodExpense = 0;
+    let prevPeriodIncome = 0;
     let prevPeriodExpense = 0;
 
     for (const tx of completed) {
@@ -236,11 +239,15 @@ export function SpendingGraph({ transactions }: Props) {
 
         dailyTotals.set(dateKey, day);
         monthTotals.set(monthKey, month);
-      } else if (isExpense && inWindow(dt, prevStartDate, prevEndDate)) {
-        prevPeriodExpense += amt;
-        const inferred = inferCategory(tx);
-        const c = inferred === 'Other' ? otherLabel : inferred;
-        categoryTotalsPrev.set(c, (categoryTotalsPrev.get(c) ?? 0) + amt);
+      } else if (inWindow(dt, prevStartDate, prevEndDate)) {
+        if (isIncome) {
+          prevPeriodIncome += amt;
+        } else if (isExpense) {
+          prevPeriodExpense += amt;
+          const inferred = inferCategory(tx);
+          const c = inferred === 'Other' ? otherLabel : inferred;
+          categoryTotalsPrev.set(c, (categoryTotalsPrev.get(c) ?? 0) + amt);
+        }
       }
     }
 
@@ -334,7 +341,9 @@ export function SpendingGraph({ transactions }: Props) {
       periodIncome,
       periodExpense,
       periodNet: periodIncome - periodExpense,
+      prevPeriodIncome,
       prevPeriodExpense,
+      prevPeriodNet: prevPeriodIncome - prevPeriodExpense,
       hasAny: hasAnyInRange,
     };
   }, [transactions, t, selectedRange]);
@@ -380,6 +389,35 @@ export function SpendingGraph({ transactions }: Props) {
     border: '1px dashed var(--border)',
   };
 
+  const calculateDelta = (curr: number, prev: number) => {
+    if (prev === 0) return { pct: null, abs: curr };
+    return { pct: ((curr - prev) / prev) * 100, abs: curr - prev };
+  };
+
+  const incomeDelta = calculateDelta(analytics.periodIncome, analytics.prevPeriodIncome);
+  const expenseDelta = calculateDelta(analytics.periodExpense, analytics.prevPeriodExpense);
+  const netDelta = calculateDelta(analytics.periodNet, analytics.prevPeriodNet);
+
+  const renderDelta = (delta: { pct: number | null, abs: number }, inverse = false) => {
+    const isPositive = delta.abs > 0;
+    const isNegative = delta.abs < 0;
+    
+    // For expense, positive delta is "bad" (red), negative is "good" (green)
+    // For income/net, positive is "good" (green), negative is "bad" (red)
+    const isGood = inverse ? isNegative : isPositive;
+    
+    const color = isGood ? 'var(--success)' : isNegative ? 'var(--danger)' : 'var(--muted)';
+    const arrow = isPositive ? '↑' : isNegative ? '↓' : '';
+    
+    if (delta.abs === 0) return <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>;
+
+    return (
+      <span style={{ fontSize: 12, color, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        {arrow} {Math.abs(delta.pct ?? 0).toFixed(1)}%
+      </span>
+    );
+  };
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -411,20 +449,29 @@ export function SpendingGraph({ transactions }: Props) {
           <div style={statRowStyle}>
             <div style={statCardStyle}>
               <div style={statLabelStyle}>{rangeLabel} · {t('graph.income')}</div>
-              <div style={statValueStyle}>
-                <MoneyDisplay amount={analytics.periodIncome} />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <div style={statValueStyle}>
+                  <MoneyDisplay amount={analytics.periodIncome} />
+                </div>
+                {renderDelta(incomeDelta)}
               </div>
             </div>
             <div style={statCardStyle}>
               <div style={statLabelStyle}>{rangeLabel} · {t('graph.expense')}</div>
-              <div style={statValueStyle}>
-                <MoneyDisplay amount={analytics.periodExpense} />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <div style={statValueStyle}>
+                  <MoneyDisplay amount={analytics.periodExpense} />
+                </div>
+                {renderDelta(expenseDelta, true)}
               </div>
             </div>
             <div style={statCardStyle}>
               <div style={statLabelStyle}>{rangeLabel} · {t('graph.net')}</div>
-              <div style={statValueStyle}>
-                <MoneyDisplay amount={analytics.periodNet} colorize={true} />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <div style={statValueStyle}>
+                  <MoneyDisplay amount={analytics.periodNet} colorize={true} />
+                </div>
+                {renderDelta(netDelta)}
               </div>
             </div>
           </div>
@@ -463,7 +510,7 @@ export function SpendingGraph({ transactions }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={gridOpacity} />
                 <XAxis
                   dataKey="dateLabel"
-                  stroke="var(--muted)"
+                  stroke={axisStroke}
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
@@ -472,7 +519,7 @@ export function SpendingGraph({ transactions }: Props) {
                   minTickGap={18}
                 />
                 <YAxis
-                  stroke="var(--muted)"
+                  stroke={axisStroke}
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
@@ -569,14 +616,14 @@ export function SpendingGraph({ transactions }: Props) {
           </div>
 
           <div className="hBox-wrappper">
-            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, flex: '2 1 400px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{t('graph.expense_by_category')}</div>
               <div style={{ width: '100%', height: 260 }}>
                 <ResponsiveContainer>
                   <BarChart data={analytics.categories} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={6} barCategoryGap="35%">
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={gridOpacity} />
-                    <XAxis dataKey="category" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₱${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
+                    <XAxis dataKey="category" stroke={axisStroke} fontSize={11} tickLine={false} axisLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis stroke={axisStroke} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₱${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload || payload.length === 0) return null;
@@ -633,34 +680,35 @@ export function SpendingGraph({ transactions }: Props) {
                 </ResponsiveContainer>
               </div>
             </div>
-
-            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{t('graph.monthly_trend')}</div>
-              <div style={{ width: '100%', height: 260 }}>
-                <ResponsiveContainer>
-                  <ComposedChart data={analytics.months} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={gridOpacity} />
-                    <XAxis dataKey="monthLabel" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₱${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: tooltipBg,
-                        borderColor: tooltipBorder,
-                        color: tooltipText,
-                        backdropFilter: 'blur(8px)',
-                        borderRadius: '12px',
-                        boxShadow: tooltipShadow,
-                        border: `1px solid ${tooltipBorder}`
-                      }}
-                      formatter={(value: any, name: any) => [formatMoney(Number(value)), name]}
-                    />
-                    <Legend wrapperStyle={{ paddingTop: 6, color: "var(--text)" }} iconType="circle" />
-                    <Bar dataKey="income" name={t('graph.income')} fill={monthIncomeFill} radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="expense" name={t('graph.expense')} fill={monthExpenseFill} radius={[8, 8, 0, 0]} />
-                    <Line type="monotone" dataKey="net" name={t('graph.net')} stroke={netStroke} strokeWidth={2} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
+          </div>
+          
+          {/* Monthly Trend moved below */}
+          <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{t('graph.monthly_trend')}</div>
+            <div style={{ width: '100%', height: 260 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={analytics.months} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={gridOpacity} />
+                  <XAxis dataKey="monthLabel" stroke={axisStroke} fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke={axisStroke} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `₱${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: tooltipBg,
+                      borderColor: tooltipBorder,
+                      color: tooltipText,
+                      backdropFilter: 'blur(8px)',
+                      borderRadius: '12px',
+                      boxShadow: tooltipShadow,
+                      border: `1px solid ${tooltipBorder}`
+                    }}
+                    formatter={(value: any, name: any) => [formatMoney(Number(value)), name]}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: 6, color: "var(--text)" }} iconType="circle" />
+                  <Bar dataKey="income" name={t('graph.income')} fill={monthIncomeFill} radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="expense" name={t('graph.expense')} fill={monthExpenseFill} radius={[8, 8, 0, 0]} />
+                  <Line type="monotone" dataKey="net" name={t('graph.net')} stroke={netStroke} strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </>
