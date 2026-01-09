@@ -292,11 +292,11 @@ export async function fetchTransactions(params: {
 	max_amount?: number;
 	limit?: number;
 }): Promise<TransactionResponse> {
-	// First check if Java server is healthy
-	const javaServerHealthy = await checkJavaServerHealth();
+	// Check if Java server should be used (startup-only check)
+	const useJavaServer = await shouldUseJavaServer();
 
-	if (!javaServerHealthy || !JAVA_API_BASE) {
-		console.log("🔄 Falling back to Next.js API for transactions");
+	if (!useJavaServer || !JAVA_API_BASE) {
+		console.log("🔄 Using Next.js API for transactions (determined at startup)");
 		return fetchTransactionsNextJS(params);
 	}
 
@@ -346,11 +346,11 @@ export async function fetchTransactions(params: {
 export async function fetchTransaction(
 	id: string | number
 ): Promise<Transaction> {
-	// First check if Java server is healthy
-	const javaServerHealthy = await checkJavaServerHealth();
+	// Check if Java server should be used (startup-only check)
+	const useJavaServer = await shouldUseJavaServer();
 
-	if (!javaServerHealthy || !JAVA_API_BASE) {
-		console.log("🔄 Falling back to Next.js API for single transaction fetch");
+	if (!useJavaServer || !JAVA_API_BASE) {
+		console.log("🔄 Using Next.js API for single transaction fetch (determined at startup)");
 		const response = await fetch(`/api/transactions/${id}`, {
 			method: "GET",
 			headers: { Accept: "application/json" },
@@ -457,11 +457,11 @@ async function createTransactionNextJS(
 export async function createTransaction(
 	data: CreateTransactionRequest
 ): Promise<CreateTransactionResponse> {
-	// First check if Java server is healthy
-	const javaServerHealthy = await checkJavaServerHealth();
+	// Check if Java server should be used (startup-only check)
+	const useJavaServer = await shouldUseJavaServer();
 
-	if (!javaServerHealthy || !JAVA_API_BASE) {
-		console.log("🔄 Falling back to Next.js API for transaction creation");
+	if (!useJavaServer || !JAVA_API_BASE) {
+		console.log("🔄 Using Next.js API for transaction creation (determined at startup)");
 		return createTransactionNextJS(data);
 	}
 
