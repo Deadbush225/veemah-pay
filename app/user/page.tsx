@@ -114,6 +114,25 @@ export default function UserPage() {
     }
   }, [fetchMe, fetchTransactions, me, t]);
 
+  // Fast refresh - only account balance (non-blocking for transactions)
+  const refreshBalance = useCallback(async () => {
+    try {
+      await fetchMe();
+    } catch (e: any) {
+      setError(e?.message || t('user.operation_failed'));
+    }
+  }, [fetchMe, t]);
+
+  // Refresh transactions in background (non-blocking)
+  const refreshTransactionsAsync = useCallback(async (acc: string) => {
+    try {
+      await fetchTransactions(acc);
+    } catch (e: any) {
+      // Silently handle transaction refresh errors to avoid blocking UI
+      console.warn('Failed to refresh transactions:', e?.message);
+    }
+  }, [fetchTransactions]);
+
   useEffect(() => {
     // Log Java API configuration for debugging
     config.logConfig();
@@ -235,8 +254,13 @@ export default function UserPage() {
 
       if (!opOk) return;
 
+      // Refresh balance immediately (fast) and transactions in background (non-blocking)
       try {
-        await refreshData();
+        await refreshBalance();
+        // Refresh transactions asynchronously without blocking the UI
+        if (me?.account_number) {
+          refreshTransactionsAsync(me.account_number);
+        }
       } catch (e: any) {
         setError(e?.message || t('user.operation_failed'));
       }
@@ -317,8 +341,13 @@ export default function UserPage() {
 
       if (!opOk) return;
 
+      // Refresh balance immediately (fast) and transactions in background (non-blocking)
       try {
-        await refreshData();
+        await refreshBalance();
+        // Refresh transactions asynchronously without blocking the UI
+        if (me?.account_number) {
+          refreshTransactionsAsync(me.account_number);
+        }
       } catch (e: any) {
         setError(e?.message || t('user.transfer_failed'));
       }
