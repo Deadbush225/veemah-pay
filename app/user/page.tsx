@@ -328,7 +328,7 @@ export default function UserPage() {
   return (
     <main>
       <Header />
-      <JavaServerTest />
+      {/* <JavaServerTest /> */}
       <section className="quick-actions">
         <div className="inner container" style={{ display: "grid", gap: 16 }}>
           {me && (
