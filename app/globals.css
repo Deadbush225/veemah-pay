@@ -854,7 +854,7 @@ select {
   position: absolute;
   right: 8px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) translate(47%);
   background: none;
   border: none;
   cursor: pointer;
