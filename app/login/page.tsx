@@ -6,6 +6,7 @@ import { Header } from '@/components/nav/Header';
 import { useLanguage } from '@/components/ui/LanguageProvider';
 import { useAuth } from '@/components/ui/AuthProvider';
 import { ParallaxBackground } from '@/components/landing/ParallaxBackground';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -127,11 +128,10 @@ export default function LoginPage() {
                 
                 <div>
                   <label style={{ display: 'block', marginBottom: 8, fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>{t('login.password')}</label>
-                  <input 
+                  <PasswordInput
                     placeholder={t('login.password_placeholder')} 
-                    type="password" 
                     value={password} 
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={setPassword}
                     onKeyDown={e => e.key === 'Enter' && submit()}
                     style={{ padding: '14px 16px', fontSize: '16px', background: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--border)' }}
                   />

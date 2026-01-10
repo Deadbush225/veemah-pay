@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { fetchTransactions as fetchTransactionsJava, createTransaction, updateTransaction, cancelTransaction } from '@/lib/java-api';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 type Account = {
   account_number: string;
@@ -603,7 +604,7 @@ export default function Landing98() {
                   </div>
                   <div className="field-row" style={{ alignItems: 'center' }}>
                     <label htmlFor="pin">PIN</label>
-                    <input id="pin" type="password" value={pin} onChange={(e) => setPin(e.target.value)} />
+                    <PasswordInput id="pin" value={pin} onChange={setPin} />
                   </div>
                   <div className="field-row" style={{ marginTop: 8 }}>
                     <button onClick={login}>Start</button>
@@ -624,11 +625,11 @@ export default function Landing98() {
                   </div>
                   <div className="field-row" style={{ alignItems: 'center' }}>
                     <label htmlFor="newPin">PIN</label>
-                    <input id="newPin" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} />
+                    <PasswordInput id="newPin" value={newPin} onChange={setNewPin} />
                   </div>
                   <div className="field-row" style={{ alignItems: 'center' }}>
                     <label htmlFor="newPin2">Confirm PIN</label>
-                    <input id="newPin2" type="password" value={newPinConfirm} onChange={(e) => setNewPinConfirm(e.target.value)} />
+                    <PasswordInput id="newPin2" value={newPinConfirm} onChange={setNewPinConfirm} />
                   </div>
                   <div className="field-row" style={{ alignItems: 'center' }}>
                     <label htmlFor="initBal">Initial Balance</label>

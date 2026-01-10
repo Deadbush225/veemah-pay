@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from '@/components/nav/Header';
 import { Modal } from '@/components/ui/Modal';
 import { useLanguage } from '@/components/ui/LanguageProvider';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -129,18 +130,16 @@ export default function ForgotPasswordPage() {
                   </button>
                 ) : (
                   <>
-                    <input 
-                      type="password" 
+                    <PasswordInput 
                       placeholder={t('forgot.new_password_placeholder')} 
                       value={newPassword} 
-                      onChange={e => setNewPassword(e.target.value)} 
+                      onChange={setNewPassword} 
                       style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
                     />
-                    <input 
-                      type="password" 
+                    <PasswordInput 
                       placeholder={t('forgot.confirm_password_placeholder')} 
                       value={confirmPassword} 
-                      onChange={e => setConfirmPassword(e.target.value)} 
+                      onChange={setConfirmPassword} 
                       style={{ padding: '12px', background: 'var(--card)', color: 'var(--text)', borderColor: 'var(--border)' }}
                     />
                     <button className="btn primary" onClick={resetPassword} disabled={pending} style={{ padding: '12px' }}>

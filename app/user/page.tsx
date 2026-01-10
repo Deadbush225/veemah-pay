@@ -8,6 +8,7 @@ import { useAuth } from '@/components/ui/AuthProvider';
 import { QRModal } from '@/components/ui/QRModal';
 import { MoneyDisplay, PositiveMoney } from '@/components/ui/MoneyDisplay';
 import { useToast } from "@/components/ui/Toast";
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { fetchTransactions as fetchTransactionsJava, createTransaction, config } from '@/lib/java-api';
 
 type Account = { account_number: string; name: string; balance: number; status: string };
@@ -471,7 +472,13 @@ export default function UserPage() {
             <div className="card card flexible-card">
               <h3>{t('dash.withdraw')}</h3>
               <input placeholder={t('dash.amount')} value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
-              <input type="password" placeholder={t('user.pin_placeholder')} value={wdPin} onChange={e => setWdPin(e.target.value)} maxLength={5} style={{ marginTop: 8 }} />
+              <PasswordInput 
+                placeholder={t('user.pin_placeholder')} 
+                value={wdPin} 
+                onChange={setWdPin} 
+                maxLength={5} 
+                style={{ marginTop: 8 }} 
+              />
               <button className="btn primary" onClick={() => doOp("withdraw")} disabled={pending}>{t('dash.withdraw')}</button>
             </div>
             <div className="card card flexible-card">
@@ -504,7 +511,12 @@ export default function UserPage() {
                 </div>
               )}
               <input placeholder={t('dash.amount')} value={txAmount} onChange={e => setTxAmount(e.target.value)} />
-              <input type="password" placeholder={t('user.pin_placeholder')} value={txPin} onChange={e => setTxPin(e.target.value)} maxLength={5} />
+              <PasswordInput 
+                placeholder={t('user.pin_placeholder')} 
+                value={txPin} 
+                onChange={setTxPin} 
+                maxLength={5} 
+              />
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   className="btn primary"
