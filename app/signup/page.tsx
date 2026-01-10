@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/ui/LanguageProvider';
 import { useAuth } from '@/components/ui/AuthProvider';
 import { ParallaxBackground } from '@/components/landing/ParallaxBackground';
 import { Modal } from "@/components/ui/Modal";
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -215,11 +216,21 @@ export default function SignupPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="hBox">
         <div>
           <label style={{ display: 'block', marginBottom: 6, fontSize: '14px', fontWeight: 500 }}>{t('signup.password')}</label>
-          <input placeholder={t('signup.password_placeholder')} type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '12px 16px', fontSize: '16px' }} />
+          <PasswordInput 
+            placeholder={t('signup.password_placeholder')} 
+            value={password} 
+            onChange={setPassword} 
+            style={{ padding: '12px 16px', fontSize: '16px' }} 
+          />
         </div>
         <div>
           <label style={{ display: 'block', marginBottom: 6, fontSize: '14px', fontWeight: 500 }}>{t('signup.confirm_password')}</label>
-          <input placeholder={t('signup.confirm_password_placeholder')} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ padding: '12px 16px', fontSize: '16px' }} />
+          <PasswordInput 
+            placeholder={t('signup.confirm_password_placeholder')} 
+            value={confirmPassword} 
+            onChange={setConfirmPassword} 
+            style={{ padding: '12px 16px', fontSize: '16px' }} 
+          />
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="hBox">

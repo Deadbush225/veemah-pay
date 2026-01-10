@@ -5,6 +5,7 @@ import { Header } from "@/components/nav/Header";
 import { useLanguage } from "@/components/ui/LanguageProvider";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/ui/AuthProvider";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Account = {
   account_number: string;
@@ -326,12 +327,12 @@ export default function SettingsPage() {
               <div className="grid gap-12" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
                 <div>
                   <label>{t("settings.current_password_optional")}</label>
-                  <input type="password" value={profileCurrentPassword} onChange={(e) => setProfileCurrentPassword(e.target.value)} />
+                  <PasswordInput value={profileCurrentPassword} onChange={setProfileCurrentPassword} />
                 </div>
-                <div>
+                {/* <div>
                   <label>{t("settings.current_pin_optional")}</label>
                   <input value={profileCurrentPin} onChange={(e) => setProfileCurrentPin(e.target.value)} />
-                </div>
+                </div> */}
               </div>
               {emailChangeEmail && (
                 <div className="card" style={{ padding: 12 }}>
@@ -368,21 +369,21 @@ export default function SettingsPage() {
                   <div className="grid gap-12" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
                     <div>
                       <label>{t("settings.current_password_optional")}</label>
-                      <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} />
+                      <PasswordInput value={pwCurrent} onChange={setPwCurrent} />
                     </div>
-                    <div>
+                    {/* <div>
                       <label>{t("settings.current_pin_optional")}</label>
                       <input value={pwPin} onChange={(e) => setPwPin(e.target.value)} />
-                    </div>
+                    </div> */}
                   </div>
                   <div className="grid gap-12" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
                     <div>
                       <label>{t("settings.new_password")}</label>
-                      <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} />
+                      <PasswordInput value={pwNew} onChange={setPwNew} />
                     </div>
                     <div>
                       <label>{t("settings.confirm_password")}</label>
-                      <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} />
+                      <PasswordInput value={pwConfirm} onChange={setPwConfirm} />
                     </div>
                   </div>
                   <button className="btn" onClick={submitPassword} disabled={pwPending}>
